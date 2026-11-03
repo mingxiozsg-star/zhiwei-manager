@@ -51,7 +51,7 @@ shizuku-api = { group = "dev.rikka.shizuku", name = "api", version.ref = "shizuk
 shizuku-provider = { group = "dev.rikka.shizuku", name = "provider", version.ref = "shizuku" }
 java-diff-utils = { group = "io.github.java-diff-utils", name = "java-diff-utils", version.ref = "diffUtils" }
 smali = { group = "com.android.tools.smali", name = "smali", version.ref = "smali" }
-baksmali = { group = "com.android.tools.smali", name = "baksmali", version.ref = "smali" }
+baksmali = { group = "com.android.tools.smali", name = "smali-baksmali", version.ref = "smali" }
 smali-dexlib2 = { group = "com.android.tools.smali", name = "smali-dexlib2", version.ref = "smali" }
 desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugar" }
 

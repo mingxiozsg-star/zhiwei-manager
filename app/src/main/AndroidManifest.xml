@@ -91,6 +91,15 @@
             </intent-filter>
         </activity>
 
+        <!-- Shizuku 客户端 Provider（官方要求手动声明；AAR 清单不含 provider 节点） -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:enabled="true"
+            android:exported="true"
+            android:multiprocess="false"
+            android:permission="moe.shizuku.manager.permission.API_V23" />
+
         <!-- 对外共享文件（发送 APK / 文本 / 导出结果） -->
         <provider
             android:name="androidx.core.content.FileProvider"

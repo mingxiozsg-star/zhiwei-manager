@@ -19,3 +19,7 @@ keystore.properties
 *.jks
 *.keystore
 release.jks
+
+# 工作区内部备份，不入库
+.backup/
+.backup

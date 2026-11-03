@@ -30,6 +30,20 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
+      - name: Ensure Android SDK components
+        run: |
+          SDKMANAGER="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
+          if [ -x "${SDKMANAGER}" ]; then
+            "${SDKMANAGER}" --install "platforms;android-35" "build-tools;35.0.0" > /dev/null 2>&1 || true
+          fi
+          "${ANDROID_HOME}/platform-tools/adb" version > /dev/null 2>&1 || true
+
+      - name: Toolchain diagnostics
+        run: |
+          java -version
+          ./gradlew --version
+
+
       - name: Prepare signing material
         env:
           KS_B64: ${{ secrets.KEYSTORE_BASE64 }}

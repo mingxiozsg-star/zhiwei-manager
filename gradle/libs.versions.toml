@@ -1,6 +1,8 @@
 [versions]
 agp = "9.0.0"
-kotlin = "2.3.10"
+# 与 AGP 9.0.0 自身依赖树中的 kotlin-gradle-plugin / kotlin-stdlib 严格对齐，
+# 避免 AGP 内建的 KotlinJvmToolchain 与 KGP 版本错配。
+kotlin = "2.2.10"
 coreKtx = "1.15.0"
 lifecycle = "2.8.7"
 activityCompose = "1.9.3"
@@ -57,4 +59,5 @@ desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", ver
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

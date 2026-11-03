@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 共享给第三方应用的路径（仅按需授权，不暴露根目录映射之外的路径） -->
+<paths>
+    <files-path name="inner_files" path="." />
+    <cache-path name="inner_cache" path="." />
+    <external-files-path name="ext_files" path="." />
+    <external-cache-path name="ext_cache" path="." />
+    <external-path name="ext_storage" path="." />
+</paths>

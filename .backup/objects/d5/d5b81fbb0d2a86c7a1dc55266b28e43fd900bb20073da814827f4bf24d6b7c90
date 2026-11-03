@@ -1,0 +1,192 @@
+package com.zhiwei.filemanager.ui.terminal
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.zhiwei.filemanager.core.prefs.AppPrefs
+import com.zhiwei.filemanager.core.shell.ShellRunner
+import com.zhiwei.filemanager.core.shell.ShizukuHelper
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+private enum class Channel(val label: String) {
+    SHELL("普通"),
+    ROOT("ROOT"),
+    SHIZUKU("Shizuku")
+}
+
+private val QUICK = listOf(
+    "id",
+    "ls -l /sdcard",
+    "ls -l /data/app",
+    "ls -l /data/data",
+    "df -h",
+    "df -h /data",
+    "ps -A | head -30",
+    "getprop ro.product.model",
+    "dumpsys package com.zhiwei.filemanager | head -20",
+    "cat /proc/cpuinfo | head -20",
+    "pm list packages | wc -l",
+    "du -sh /sdcard/Download"
+)
+
+/** 内置终端：普通权限 / ROOT / Shizuku 三通道，输出保留在会话内。 */
+@Composable
+fun TerminalScreen() {
+    val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
+    var lines by remember {
+        mutableStateOf(
+            listOf(
+                "知微管理器 · 内置终端",
+                "通道说明：普通＝sh -c；ROOT＝su -c；Shizuku＝shell(uid 2000)。",
+                "提示：cd 会作用于当前会话目录；输入 exit 无副作用。",
+                ""
+            )
+        )
+    }
+    var input by remember { mutableStateOf("") }
+    var channel by remember { mutableStateOf(if (AppPrefs.rootEnabled) Channel.ROOT else Channel.SHELL) }
+    var cwd by remember { mutableStateOf("/sdcard") }
+    var running by remember { mutableStateOf(false) }
+
+    val execute: (String) -> Unit = { raw ->
+        val cmd = raw.trim()
+        if (cmd.isNotEmpty() && !running) {
+            running = true
+            if (cmd.startsWith("cd ")) {
+                val target = cmd.removePrefix("cd ").trim()
+                val next = if (target.startsWith("/")) target else cwd.trimEnd('/') + "/" + target
+                cwd = next
+                lines = lines + "> cd $target" + "\n  工作目录 → $next"
+                running = false
+            } else {
+                lines = lines + ("> " + cmd)
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) {
+                        val full = "cd " + ShizukuHelper.quote(cwd) + " && " + cmd
+                        when (channel) {
+                            Channel.SHELL -> ShellRunner.exec(full, asRoot = false)
+                            Channel.ROOT -> ShellRunner.exec(full, asRoot = true)
+                            Channel.SHIZUKU -> ShizukuHelper.exec(full)
+                        }
+                    }
+                    val body = result.output.trimEnd().ifBlank { "[无输出]" }
+                    lines = lines + body + "\n— exit " + result.code + " —"
+                    if (lines.size > 400) lines = lines.takeLast(400)
+                    running = false
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(lines.size) {
+        if (lines.isNotEmpty()) listState.scrollToItem(lines.size - 1)
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Channel.entries.forEach { c ->
+                val active = channel == c
+                Text(
+                    text = c.label,
+                    fontSize = 12.sp,
+                    fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                    color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .clickable { channel = c }
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                )
+            }
+            Text(
+                text = if (running) "执行中…" else cwd,
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f).padding(start = 6.dp),
+                maxLines = 1
+            )
+            TextButton(onClick = { lines = lines.take(4); }) { Text("清屏", fontSize = 12.sp) }
+        }
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            QUICK.forEach { q ->
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
+                    modifier = Modifier.clickable(enabled = !running) { execute(q) }
+                ) {
+                    Text(q, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                }
+            }
+        }
+        Surface(
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 4.dp)
+        ) {
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(8.dp)) {
+                itemsIndexed(lines) { _, line ->
+                    Text(
+                        text = line,
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = if (line.startsWith("> ")) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = input,
+                onValueChange = { input = it },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp),
+                placeholder = { Text("输入命令…", fontSize = 13.sp) }
+            )
+            TextButton(
+                enabled = !running,
+                onClick = {
+                    execute(input)
+                    input = ""
+                }
+            ) { Text("执行") }
+        }
+    }
+}

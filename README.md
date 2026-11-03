@@ -121,6 +121,23 @@ GitHub → Actions → Android CI → Run workflow
 - 打 `v*` 标签时会自动创建 GitHub Release 并挂上 APK
 - 本地 aarch64（proot）环境下 `aapt2` 会自动切到 `linux-aarch64`，云端 x86_64 用默认分发
 
+### 工具链版本矩阵（已实测对齐）
+| 组件 | 版本 | 说明 |
+| --- | --- | --- |
+| Gradle | 9.1.0 | Wrapper 固化，AGP 9 要求 Gradle 9.x |
+| AGP | 9.0.0 | 字节码 Java 11 基线，JDK 17 可运行 |
+| Kotlin / KGP | 2.2.10 | 与 AGP 9.0.0 依赖树内的 kotlin-gradle-plugin 严格一致，避免 DSL 二进制错配 |
+| compileSdk / targetSdk | 35 | Compose 1.10.2、material3 1.4.0、core 1.16.0 的 `minCompileSdk` 均为 35 |
+| minSdk | 24 | 无多 dex 需求 |
+| JVM target | 17 | Kotlin 与 Java 必须一致，否则一致性校验直接失败 |
+
+两个容易踩的构建坑（已修）：
+1. **Kotlin 插件必须显式声明**。AGP 9 虽然内置 `com.android.built-in-kotlin`，但它被
+   `android.experimental.declarative`（默认 **false**）开关守门，默认不会启用；缺失
+   `org.jetbrains.kotlin.android` 会导致 Kotlin 源码根本不参与编译。
+2. **Kotlin 版本不要高于 AGP 编译期依赖的 KGP**。AGP 9.0.0 编译期绑定 KGP 2.2.10，
+   刻意升到 2.3.x 可能触发 DSL 层二进制不兼容。
+
 ## 六、辅助脚本
 
 - `tools/check_kotlin.py <dir>`：Kotlin 源文件括号/引号平衡校验

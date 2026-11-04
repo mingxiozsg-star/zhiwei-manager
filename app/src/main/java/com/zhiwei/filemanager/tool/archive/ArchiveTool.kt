@@ -18,7 +18,7 @@ data class ArchiveEntry(val name: String, val size: Long, val isDir: Boolean)
 
 data class ArchiveResult(val ok: Int, val failed: Int, val destDir: String?)
 
-/** 归档：zip/jar/apk/tar/gz/xz/lz4/zst 解压，zip 压缩。7z / rar 待接入。 */
+/** 归档：zip/jar/apk/tar/gz/xz/lz4/zst/7z/rar 解压，zip 压缩。 */
 object ArchiveTool {
 
     private const val BUF = 256 * 1024
@@ -105,7 +105,8 @@ object ArchiveTool {
                 ext == "xz" -> extractSingle(XZInputStream(f.inputStream()), dest, base, taskId)
                 ext == "lz4" -> extractSingle(LZ4FrameInputStream(f.inputStream()), dest, base, taskId)
                 ext == "zst" || ext == "zstd" -> extractSingle(ZstdInputStream(f.inputStream()), dest, base, taskId)
-                ext == "7z" || ext == "rar" -> ArchiveResult(0, 1, null)
+                ext == "7z" -> extract7z(f, dest, taskId, onProgress)
+                ext == "rar" -> extractRar(f, dest, taskId, onProgress)
                 else -> ArchiveResult(0, 1, null)
             }
         } catch (t: Throwable) {
@@ -185,6 +186,57 @@ object ArchiveTool {
             val target = File(dest, baseName.ifEmpty { "output" })
             BufferedOutputStream(FileOutputStream(target), BUF).use { output -> copy(raw, output) }
             TaskCenter.update(taskId, 1f, target.name)
+            ArchiveResult(1, 0, dest.absolutePath)
+        } catch (t: Throwable) {
+            ArchiveResult(0, 1, dest.absolutePath)
+        }
+    }
+
+    /** 7z 解压：走 commons-compress 的 SevenZFile，原生支持 LZMA/LZMA2/BZip2/Deflate。 */
+    private fun extract7z(f: File, dest: File, taskId: Long, onProgress: ((Float, String) -> Unit)?): ArchiveResult {
+        var ok = 0
+        var failed = 0
+        try {
+            org.apache.commons.compress.archivers.sevenz.SevenZFile(f).use { sz ->
+                var entry = sz.nextEntry()
+                while (entry != null) {
+                    val name = entry.name
+                    val target = safeTarget(dest, name)
+                    if (target == null) {
+                        failed++
+                    } else if (entry.isDirectory) {
+                        if (target.isDirectory || target.mkdirs()) ok++ else failed++
+                    } else {
+                        try {
+                            target.parentFile?.mkdirs()
+                            BufferedOutputStream(FileOutputStream(target), BUF).use { out -> copy(sz, out) }
+                            ok++
+                        } catch (t: Throwable) {
+                            failed++
+                        }
+                    }
+                    onProgress?.invoke(0.5f, name)
+                    TaskCenter.update(taskId, 0.5f, name)
+                    entry = sz.nextEntry()
+                }
+            }
+        } catch (t: Throwable) {
+            // 加密头 / BCJ2 等不支持的特性会抛异常，此处只累计失败数，不炸上层
+            failed++
+        }
+        onProgress?.invoke(1f, "完成")
+        TaskCenter.update(taskId, 1f, "完成")
+        return ArchiveResult(ok, failed, dest.absolutePath)
+    }
+
+    /** rar 解压：走 junrar 的高层 extract，密码保护 / 分卷卷缺失会落到失败计数。 */
+    private fun extractRar(f: File, dest: File, taskId: Long, onProgress: ((Float, String) -> Unit)?): ArchiveResult {
+        return try {
+            TaskCenter.update(taskId, 0.3f, f.name)
+            onProgress?.invoke(0.3f, f.name)
+            com.github.junrar.Junrar.extract(f, dest)
+            TaskCenter.update(taskId, 1f, "完成")
+            onProgress?.invoke(1f, "完成")
             ArchiveResult(1, 0, dest.absolutePath)
         } catch (t: Throwable) {
             ArchiveResult(0, 1, dest.absolutePath)

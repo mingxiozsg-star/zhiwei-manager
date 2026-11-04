@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import com.zhiwei.filemanager.core.fs.FileRepo
 import com.zhiwei.filemanager.core.model.FileItem
 import com.zhiwei.filemanager.core.prefs.AppPrefs
+import com.zhiwei.filemanager.core.prefs.BookmarkStore
 import java.io.File
 
 /** 单个窗口（窗格）的状态。 */
@@ -37,6 +38,7 @@ class PaneState(initialPath: String) {
         keyword = ""
         selected.clear()
         refresh()
+        BookmarkStore.pushRecent(newPath)
     }
 
     fun up() {

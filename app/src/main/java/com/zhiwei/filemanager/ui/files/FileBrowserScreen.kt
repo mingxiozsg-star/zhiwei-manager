@@ -77,7 +77,13 @@ data class FileNav(
     val openText: (String) -> Unit,
     val openHex: (String) -> Unit,
     val openDex: (String) -> Unit,
-    val toast: (String) -> Unit
+    val toast: (String) -> Unit,
+    /** 多选批量重命名。 */
+    val openRename: (List<String>) -> Unit = {},
+    /** 左右两侧路径对比（可为文件或目录）。 */
+    val openCompare: (String, String) -> Unit = { _, _ -> },
+    /** 打开文本批量合并（带默认目录）。 */
+    val openMerge: (String) -> Unit = {}
 )
 
 private sealed interface FileDialog {
@@ -93,9 +99,15 @@ fun FileBrowserScreen(state: FileBrowserState, nav: FileNav) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var dialog by remember { mutableStateOf<FileDialog?>(null) }
+    var bookmarkOpen by remember { mutableStateOf(false) }
+    var searchOpen by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
-        PaneTabs(state)
+        PaneTabs(
+            state = state,
+            onBookmarks = { bookmarkOpen = true },
+            onSearch = { searchOpen = true }
+        )
         state.panes.forEachIndexed { index, pane ->
             PaneBox(
                 state = state,
@@ -109,6 +121,25 @@ fun FileBrowserScreen(state: FileBrowserState, nav: FileNav) {
             if (index < state.panes.size - 1) HorizontalDivider()
         }
         BottomBar(state, nav, onDialog = { dialog = it })
+    }
+
+    if (bookmarkOpen) {
+        BookmarkSheet(
+            state = state,
+            onOpen = { path -> state.active.open(path) },
+            onClose = { bookmarkOpen = false }
+        )
+    }
+    if (searchOpen) {
+        SearchSheet(
+            pane = state.active,
+            onOpen = { hit ->
+                val parent = java.io.File(hit.path).parent
+                if (parent != null) state.active.open(parent)
+                nav.toast("已定位到 " + (parent ?: hit.path))
+            },
+            onClose = { searchOpen = false }
+        )
     }
 
     when (val d = dialog) {
@@ -144,7 +175,11 @@ fun FileBrowserScreen(state: FileBrowserState, nav: FileNav) {
 }
 
 @Composable
-private fun PaneTabs(state: FileBrowserState) {
+private fun PaneTabs(
+    state: FileBrowserState,
+    onBookmarks: () -> Unit,
+    onSearch: () -> Unit
+) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -188,6 +223,8 @@ private fun PaneTabs(state: FileBrowserState) {
             Text(if (state.panes.size > 1) "单窗" else "双窗", fontSize = 12.sp)
         }
         TextButton(onClick = { state.addPane("/sdcard") }) { Text("+窗口", fontSize = 12.sp) }
+        TextButton(onClick = onBookmarks) { Text("★ 收藏", fontSize = 12.sp) }
+        TextButton(onClick = onSearch) { Text("🔍 搜索", fontSize = 12.sp) }
     }
 }
 
@@ -255,6 +292,8 @@ private fun PaneBox(
             }
         }
 
+        QuickAccessRow(onOpen = { pane.open(it) })
+
         if (searching) {
             OutlinedTextField(
                 value = pane.keyword,
@@ -281,7 +320,7 @@ private fun PaneBox(
         val list = pane.visibleItems()
         LazyColumn(Modifier.fillMaxWidth().weight(1f, fill = false)) {
             if (list.isEmpty() && !loading) {
-                item { Text("（空目录）", fontSize = 12.sp, modifier = Modifier.padding(12.dp)) }
+                item { EmptyHint(pane.path, pane.keyword) }
             }
             items(list, key = { it.path }) { item ->
                 FileRow(
@@ -303,6 +342,85 @@ private fun PaneBox(
                 )
             }
         }
+        PaneStatusBar(pane = pane, list = list)
+    }
+}
+
+/** 常用目录快捷入口：省掉一层层点进去的成本。 */
+@Composable
+private fun QuickAccessRow(onOpen: (String) -> Unit) {
+    val roots = remember { FileRepo.quickPaths() }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        roots.forEach { (label, path) ->
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier
+                    .padding(end = 6.dp)
+                    .clickable { onOpen(path) }
+            ) {
+                Text(
+                    label,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyHint(path: String, keyword: String) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 26.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text("◌", fontSize = 26.sp, color = MaterialTheme.colorScheme.outline)
+        Text(
+            if (keyword.isBlank()) "当前目录为空" else "没有匹配「$keyword」的项目",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 6.dp)
+        )
+        Text(
+            path,
+            fontSize = 10.sp,
+            color = MaterialTheme.colorScheme.outline,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 2.dp)
+        )
+    }
+}
+
+/** 状态条：项目数 / 已选 / 合计体积，避免用户还要点进属性里看。 */
+@Composable
+private fun PaneStatusBar(pane: PaneState, list: List<FileItem>) {
+    val totalSize = remember(list) { list.sumOf { it.size } }
+    val dirCount = remember(list) { list.count { it.isDir } }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .padding(horizontal = 10.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            buildString {
+                append("共 ").append(list.size).append(" 项")
+                if (dirCount > 0) append("（").append(dirCount).append(" 个文件夹）")
+                append(" · 合计 ").append(Format.size(totalSize))
+                if (pane.selected.isNotEmpty()) append(" · 已选 ").append(pane.selected.size)
+            },
+            fontSize = 10.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -416,6 +534,29 @@ private fun BottomBar(state: FileBrowserState, nav: FileNav, onDialog: (FileDial
                     pane.clearSelection()
                     nav.toast("已剪切")
                 }) { Text("剪切", fontSize = 12.sp) }
+                TextButton(onClick = { nav.openRename(pane.selected.toList()) }) {
+                    Text("重命名", fontSize = 12.sp)
+                }
+                TextButton(onClick = {
+                    val paths = pane.selected.toList()
+                    val out = FileOps.uniqueTarget(pane.path, "archive_${System.currentTimeMillis() / 1000}.zip")
+                    pane.clearSelection()
+                    nav.toast("压缩中：${out.name}")
+                    scope.launch {
+                        withContext(Dispatchers.IO) { ArchiveTool.compressToZip(paths, out.absolutePath) }
+                        state.panes.forEach { it.refresh() }
+                    }
+                }) { Text("压缩", fontSize = 12.sp) }
+                TextButton(onClick = {
+                    val paths = pane.selected.toList()
+                    val first = paths.firstOrNull()
+                    val second = paths.drop(1).firstOrNull() ?: state.other?.path
+                    if (first != null && second != null) {
+                        nav.openCompare(first, second)
+                    } else {
+                        nav.toast("对比需要两项，或开双窗")
+                    }
+                }) { Text("对比", fontSize = 12.sp) }
                 if (state.panes.size > 1) {
                     TextButton(onClick = {
                         val other = state.other ?: return@TextButton
@@ -458,6 +599,13 @@ private fun BottomBar(state: FileBrowserState, nav: FileNav, onDialog: (FileDial
                 }) { Text("粘贴到此处", fontSize = 12.sp) }
                 TextButton(onClick = { state.clearClipboard() }) { Text("清空", fontSize = 12.sp) }
             } else {
+                TextButton(onClick = { nav.openMerge(pane.path) }) { Text("合并文本", fontSize = 12.sp) }
+                if (state.panes.size > 1) {
+                    TextButton(onClick = {
+                        val other = state.other ?: return@TextButton
+                        nav.openCompare(pane.path, other.path)
+                    }) { Text("对比双窗", fontSize = 12.sp) }
+                }
                 Text(
                     "长按文件弹出菜单 · 「双窗」可并排操作并直接互传",
                     fontSize = 11.sp,

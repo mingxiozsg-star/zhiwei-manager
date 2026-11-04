@@ -2,6 +2,12 @@ package com.zhiwei.filemanager.ui
 
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,11 +48,14 @@ import com.zhiwei.filemanager.ui.files.FileNav
 import com.zhiwei.filemanager.ui.settings.SettingsScreen
 import com.zhiwei.filemanager.ui.tasks.TaskBoardScreen
 import com.zhiwei.filemanager.ui.terminal.TerminalScreen
+import com.zhiwei.filemanager.ui.tools.BatchRenameScreen
+import com.zhiwei.filemanager.ui.tools.CompareScreen
 import com.zhiwei.filemanager.ui.tools.DexToolScreen
 import com.zhiwei.filemanager.ui.tools.DiffScreen
 import com.zhiwei.filemanager.ui.tools.EditorScreen
 import com.zhiwei.filemanager.ui.tools.EncodingScreen
 import com.zhiwei.filemanager.ui.tools.HexViewerScreen
+import com.zhiwei.filemanager.ui.tools.MergeScreen
 import com.zhiwei.filemanager.ui.tools.StringToolsScreen
 import com.zhiwei.filemanager.ui.tools.ToolPage
 import com.zhiwei.filemanager.ui.tools.ToolboxScreen
@@ -78,7 +87,10 @@ fun AppRoot() {
             openText = { route = Route.Tool(ToolPage.EDITOR, it) },
             openHex = { route = Route.Tool(ToolPage.HEX, it) },
             openDex = { route = Route.Tool(ToolPage.DEX, it) },
-            toast = { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+            toast = { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() },
+            openRename = { paths -> route = Route.Tool(ToolPage.BATCH_RENAME, paths.joinToString("\n")) },
+            openCompare = { a, b -> route = Route.Tool(ToolPage.COMPARE, a + "\n" + b) },
+            openMerge = { dir -> route = Route.Tool(ToolPage.MERGE, dir) }
         )
     }
 
@@ -144,23 +156,35 @@ fun AppRoot() {
         }
     ) { pad ->
         Box(Modifier.fillMaxSize().padding(pad)) {
-            val r = route
-            if (r == null) {
-                when (tab) {
-                    MainTab.FILES -> FileBrowserScreen(state, nav)
-                    MainTab.TOOLS -> ToolboxScreen(onOpen = { route = Route.Tool(it, "") })
-                    MainTab.TASKS -> TaskBoardScreen()
-                    MainTab.SETTINGS -> SettingsScreen(
-                        state = state,
-                        onOpenTerminal = { route = Route.Terminal }
-                    )
+            AnimatedContent(
+                targetState = RouteKey(route, tab),
+                transitionSpec = {
+                    (slideInHorizontally { it / 10 } + fadeIn()) togetherWith
+                        (slideOutHorizontally { -it / 10 } + fadeOut())
+                },
+                label = "root"
+            ) { target ->
+                val r = target.route
+                if (r == null) {
+                    when (target.tab) {
+                        MainTab.FILES -> FileBrowserScreen(state, nav)
+                        MainTab.TOOLS -> ToolboxScreen(onOpen = { route = Route.Tool(it, "") })
+                        MainTab.TASKS -> TaskBoardScreen()
+                        MainTab.SETTINGS -> SettingsScreen(
+                            state = state,
+                            onOpenTerminal = { route = Route.Terminal }
+                        )
+                    }
+                } else {
+                    RouteHost(r, onBack = { route = null })
                 }
-            } else {
-                RouteHost(r, onBack = { route = null })
             }
         }
     }
 }
+
+/** 页面切换动画的比较键：路由 + 一级页签。 */
+private data class RouteKey(val route: Route?, val tab: MainTab)
 
 @Composable
 private fun RouteHost(r: Route, onBack: () -> Unit) {
@@ -190,6 +214,12 @@ private fun RouteHost(r: Route, onBack: () -> Unit) {
                     ToolPage.HEX -> HexViewerScreen(r.path.ifBlank { "/sdcard" })
                     ToolPage.DIFF -> DiffScreen(r.path, "")
                     ToolPage.DEX -> DexToolScreen(r.path.ifBlank { "/sdcard" })
+                    ToolPage.MERGE -> MergeScreen(r.path.ifBlank { "/sdcard" })
+                    ToolPage.BATCH_RENAME -> BatchRenameScreen(r.path.split('\n').filter { it.isNotBlank() })
+                    ToolPage.COMPARE -> {
+                        val parts = r.path.split('\n')
+                        CompareScreen(parts.getOrElse(0) { "" }, parts.getOrElse(1) { "" })
+                    }
                     ToolPage.EDITOR -> EditorScreen(r.path.ifBlank { "/sdcard" })
                 }
                 Route.Terminal -> TerminalScreen()

@@ -21,12 +21,14 @@ object ToolRegistry {
             Feature("新建文件 / 文件夹 / 属性查看", FeatureStatus.READY),
             Feature("排序（名称/大小/日期/类型）与隐藏文件开关", FeatureStatus.READY),
             Feature("多选与批量操作", FeatureStatus.READY),
-            Feature("搜索（当前目录）", FeatureStatus.PARTIAL),
-            Feature("书签 / 最近访问", FeatureStatus.PLANNED),
+            Feature("搜索（当前目录 / 递归 / 内容匹配）", FeatureStatus.READY),
+            Feature("书签 / 最近访问", FeatureStatus.READY),
             Feature("ROOT 授权访问文件系统", FeatureStatus.PARTIAL, "su 通道已接"),
             Feature("Shizuku 访问 Android/data", FeatureStatus.READY),
-            Feature("文件/文件夹对比", FeatureStatus.PARTIAL),
-            Feature("文本文件批量合并", FeatureStatus.PLANNED),
+            Feature("文件/文件夹对比（文本 diff / 字节 / 目录）", FeatureStatus.READY),
+            Feature("文本文件批量合并", FeatureStatus.READY),
+            Feature("批量重命名（正则 / 序号 / 大小写）", FeatureStatus.READY),
+            Feature("常用目录快捷入口 + 目录体积统计", FeatureStatus.READY),
             Feature("数据复用优化（去重）", FeatureStatus.PLANNED)
         ),
         "Dex / Jar / Smali" to listOf(
@@ -85,7 +87,7 @@ object ToolRegistry {
         "归档与压缩" to listOf(
             Feature("ZIP / JAR / APK 解压与压缩", FeatureStatus.READY),
             Feature("TAR / GZ / XZ / LZ4 / ZSTD 解压", FeatureStatus.READY),
-            Feature("7z / RAR 解压", FeatureStatus.PLANNED),
+            Feature("7z / RAR 解压", FeatureStatus.READY, "commons-compress SevenZFile + junrar"),
             Feature("归档内文件列表预览", FeatureStatus.READY)
         ),
         "编辑器与查看器" to listOf(

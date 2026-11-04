@@ -75,6 +75,32 @@ object FileRepo {
 
     fun displayName(path: String): String = path.trimEnd('/').substringAfterLast('/').ifEmpty { "/" }
 
+    /**
+     * 常用目录快捷入口。
+     *
+     * 只返回真实存在（或至少父目录存在）的路径，避免给用户一堆点进去报错的入口；
+     * 外部存储根路径走 Environment，而不是硬编码 /sdcard，兼容多用户与分区变化。
+     */
+    fun quickPaths(): List<Pair<String, String>> {
+        val storage = try {
+            android.os.Environment.getExternalStorageDirectory().absolutePath
+        } catch (t: Throwable) {
+            "/sdcard"
+        }
+        val candidates = listOf(
+            "内部存储" to storage,
+            "下载" to "$storage/Download",
+            "图片" to "$storage/Pictures",
+            "相机" to "$storage/DCIM",
+            "文档" to "$storage/Documents",
+            "音乐" to "$storage/Music",
+            "Android/data" to "$storage/Android/data",
+            "根目录" to "/"
+        )
+        val out = candidates.filter { (_, p) -> File(p).exists() }
+        return out.ifEmpty { listOf("内部存储" to storage, "根目录" to "/") }
+    }
+
     fun kindLabel(ext: String): String = ext.uppercase(Locale.US).ifEmpty { "FILE" }
 }
 

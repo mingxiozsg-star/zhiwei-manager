@@ -2,6 +2,7 @@ package com.zhiwei.filemanager.ui.tools
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -37,49 +39,134 @@ import androidx.compose.ui.unit.sp
 import com.zhiwei.filemanager.core.fs.FileOps
 import com.zhiwei.filemanager.core.prefs.AppPrefs
 import com.zhiwei.filemanager.core.task.AppScope
+import com.zhiwei.filemanager.tool.Feature
+import com.zhiwei.filemanager.tool.FeatureStatus
+import com.zhiwei.filemanager.tool.ToolRegistry
 import com.zhiwei.filemanager.tool.codec.DexReader
 import com.zhiwei.filemanager.tool.codec.SmaliEngine
 import com.zhiwei.filemanager.tool.diff.DiffTool
 import com.zhiwei.filemanager.tool.hex.HexTool
 import com.zhiwei.filemanager.tool.text.EncodingTool
+import com.zhiwei.filemanager.tool.text.MergeOptions
+import com.zhiwei.filemanager.tool.text.MergeOrder
+import com.zhiwei.filemanager.tool.text.MergeTool
 import com.zhiwei.filemanager.tool.text.StringCodec
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-enum class ToolPage(val title: String, val desc: String) {
-    STRING("字符串工具箱", "Base64 / Hex / Unicode / URL / 哈希 / DES / JSON / 时间戳"),
-    ENCODING("文件夹编码转换", "GBK <-> UTF-8 批量转码（带编码探测）"),
-    HEX("Hex 查看器", "十六进制浏览与二进制搜索"),
-    DIFF("文本对比", "统一 diff 对比两段文本或两个文件"),
-    DEX("Dex / Smali 工具", "属性、字符串常量、反汇编、汇编、合并、分割"),
-    EDITOR("文本编辑器", "编辑 / 另存 / XML、JSON 格式化")
+enum class ToolPage(val title: String, val desc: String, val glyph: String = "◇") {
+    STRING("字符串工具箱", "Base64 / Hex / Unicode / URL / 哈希 / DES / JSON / 时间戳", "Ａ"),
+    ENCODING("文件夹编码转换", "GBK <-> UTF-8 批量转码（带编码探测）", "换"),
+    HEX("Hex 查看器", "十六进制浏览与二进制搜索", "0x"),
+    DIFF("文本对比", "统一 diff 对比两段文本或两个文件", "≠"),
+    DEX("Dex / Smali 工具", "属性、字符串常量、反汇编、汇编、合并、分割", "D"),
+    MERGE("文本批量合并", "按名称/日期顺序合并目录内全部文本文件", "⊕"),
+    BATCH_RENAME("批量重命名", "正则替换 / 序号 / 前后缀 / 大小写，一次改一批", "✎"),
+    COMPARE("文件与目录对比", "双窗一键对比：文本 diff / 字节差异 / 目录差异", "⇄"),
+    EDITOR("文本编辑器", "编辑 / 另存 / XML、JSON 格式化", "✐")
+}
+
+/** 工具箱分组目录：只放真实可用的页面。 */
+object ToolCatalog {
+    val groups: List<Pair<String, List<ToolPage>>> = listOf(
+        "文本与编码" to listOf(ToolPage.STRING, ToolPage.ENCODING, ToolPage.MERGE, ToolPage.BATCH_RENAME),
+        "查看与对比" to listOf(ToolPage.HEX, ToolPage.DIFF, ToolPage.COMPARE, ToolPage.EDITOR),
+        "逆向工程" to listOf(ToolPage.DEX)
+    )
 }
 
 @Composable
 fun ToolboxScreen(onOpen: (ToolPage) -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(10.dp)) {
-        Text("工具箱", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        Text(
-            "共 ${ToolPage.values().size} 个可用工具，其余功能进度见「设置 → 功能路线图」",
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        ToolPage.values().forEach { page ->
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 5.dp)
-                    .clickable { onOpen(page) }
-            ) {
-                Column(Modifier.padding(12.dp)) {
-                    Text(page.title, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                    Text(page.desc, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        ToolCatalog.groups.forEach { (group, pages) ->
+            Text(
+                group,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 8.dp, bottom = 6.dp)
+            )
+            pages.forEach { page ->
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                        .clickable { onOpen(page) }
+                ) {
+                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primary,
+                            shape = RoundedCornerShape(9.dp),
+                            modifier = Modifier.padding(end = 10.dp)
+                        ) {
+                            Text(
+                                page.glyph,
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                            )
+                        }
+                        Column {
+                            Text(page.title, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                            Text(
+                                page.desc,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
                 }
             }
+        }
+
+        HorizontalDivider(Modifier.padding(vertical = 12.dp))
+        Text("能力清单", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Text(
+            ToolRegistry.statsText(),
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 6.dp)
+        )
+        ToolRegistry.groups.forEach { (group, features) ->
+            Text(
+                group,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
+            )
+            features.forEach { f -> FeatureRow(f) }
+        }
+    }
+}
+
+@Composable
+private fun FeatureRow(f: Feature) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(f.name, fontSize = 12.sp, modifier = Modifier.weight(1f))
+        Surface(
+            color = when (f.status) {
+                FeatureStatus.READY -> MaterialTheme.colorScheme.primary
+                FeatureStatus.PARTIAL -> MaterialTheme.colorScheme.tertiary
+                FeatureStatus.PLANNED -> MaterialTheme.colorScheme.surfaceVariant
+            },
+            shape = RoundedCornerShape(6.dp)
+        ) {
+            Text(
+                f.status.label,
+                fontSize = 10.sp,
+                color = if (f.status == FeatureStatus.PLANNED) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.onPrimary
+                },
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+            )
         }
     }
 }
@@ -491,5 +578,115 @@ private fun formatXml(src: String): String {
             indent++
         }
         out
+    }
+}
+
+@Composable
+fun ToggleChip(label: String, on: Boolean, onClick: () -> Unit) {
+    TextButton(onClick = onClick) {
+        Text(if (on) "☑ $label" else "☐ $label", fontSize = 12.sp, maxLines = 1)
+    }
+}
+
+/** 文本批量合并：先扫描清单，再流式写盘。 */
+@Composable
+fun MergeScreen(initialPath: String = "/sdcard") {
+    var path by remember { mutableStateOf(initialPath) }
+    var exts by remember { mutableStateOf(MergeTool.DEFAULT_EXTS.joinToString(",")) }
+    var outPath by remember { mutableStateOf("") }
+    var order by remember { mutableStateOf(MergeOrder.NAME) }
+    var recursive by remember { mutableStateOf(true) }
+    var withHeader by remember { mutableStateOf(true) }
+    var blankLine by remember { mutableStateOf(true) }
+    var detect by remember { mutableStateOf(true) }
+    var running by remember { mutableStateOf(false) }
+    var progress by remember { mutableStateOf(0f) }
+    var result by remember { mutableStateOf("") }
+
+    fun options(): MergeOptions = MergeOptions(
+        recursive = recursive,
+        exts = MergeTool.parseExts(exts),
+        order = order,
+        withHeader = withHeader,
+        blankLineBetween = blankLine,
+        detectSourceCharset = detect
+    )
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(10.dp)) {
+        OutlinedTextField(
+            value = path,
+            onValueChange = { path = it },
+            label = { Text("源目录（或单个文本文件）") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+        OutlinedTextField(
+            value = exts,
+            onValueChange = { exts = it },
+            label = { Text("参与合并的扩展名（逗号分隔）") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+        )
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+            MergeOrder.entries.forEach { o ->
+                TextButton(onClick = { order = o }) {
+                    Text(if (order == o) "● ${o.label}" else o.label, fontSize = 12.sp, maxLines = 1)
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+            ToggleChip("递归子目录", recursive) { recursive = !recursive }
+            ToggleChip("写文件头", withHeader) { withHeader = !withHeader }
+            ToggleChip("文件间空行", blankLine) { blankLine = !blankLine }
+            ToggleChip("按原编码解码", detect) { detect = !detect }
+        }
+        OutlinedTextField(
+            value = outPath,
+            onValueChange = { outPath = it },
+            label = { Text("输出文件（留空自动：源目录/merged_时间戳.txt）") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+        )
+        Row(Modifier.fillMaxWidth()) {
+            TextButton(onClick = {
+                result = "扫描中…"
+                AppScope.io.launch {
+                    val plan = MergeTool.scan(File(path.trim()), options())
+                    result = plan.summary()
+                }
+            }) { Text("扫描清单", fontSize = 12.sp) }
+            TextButton(enabled = !running, onClick = {
+                running = true
+                progress = 0f
+                val opts = options()
+                val root = File(path.trim())
+                result = "合并中…"
+                AppScope.io.launch {
+                    val files = MergeTool.scan(root, opts).files
+                    val out = outPath.trim().takeIf { it.isNotEmpty() }?.let { File(it) } ?: MergeTool.defaultOut(root)
+                    val r = MergeTool.merge(files, out, opts) { p, name ->
+                        progress = p
+                        result = "写入中 ${(p * 100).toInt()}% · $name"
+                    }
+                    result = r.summary()
+                    running = false
+                }
+            }) { Text("开始合并", fontSize = 12.sp) }
+        }
+        if (running) {
+            LinearProgressIndicator(
+                progress = { progress.coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+            )
+        }
+        Text(
+            "规则：逐行流式写盘，不把源文件整体读进内存；每个文件按探测到的编码解码后统一转成 UTF-8 写出；" +
+                "单文件超过 64MB 或累计超过 512MB 自动跳过。",
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+        HorizontalDivider(Modifier.padding(vertical = 8.dp))
+        Text(result.ifEmpty { "（等待操作）" }, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
     }
 }

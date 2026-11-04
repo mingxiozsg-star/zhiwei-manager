@@ -26,7 +26,7 @@ android {
         minSdk = 24
         targetSdk = 35
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -138,6 +138,8 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    // AnimatedContent / 转场动画（foundation 传递依赖里虽带 animation，但显式声明避免版本漂移）
+    implementation(libs.androidx.animation)
 
     // 文件 / 归档
     implementation(libs.commons.io)

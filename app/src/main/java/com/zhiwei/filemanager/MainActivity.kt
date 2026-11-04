@@ -10,6 +10,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import com.zhiwei.filemanager.core.prefs.AppPrefs
+import com.zhiwei.filemanager.core.prefs.BookmarkStore
 import com.zhiwei.filemanager.ui.AppRoot
 import com.zhiwei.filemanager.ui.theme.ZhiweiTheme
 
@@ -18,6 +19,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AppPrefs.init(applicationContext)
+        BookmarkStore.init(applicationContext)
         enableEdgeToEdge()
         setContent { ZhiweiApp() }
         requestNotificationPermission()

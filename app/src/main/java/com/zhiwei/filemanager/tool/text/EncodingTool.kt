@@ -49,17 +49,20 @@ object EncodingTool {
         return "UTF-8"
     }
 
-    fun sniff(path: String): String = try {
-        val f = File(path)
-        val size = minOf(f.length(), 64L * 1024L).toInt()
-        if (size <= 0) return "EMPTY"
-        val buf = ByteArray(size)
-        FileInputStream(f).use { it.read(buf) }
-        val bom = buf.size >= 3 && (buf[0].toInt() and 0xFF) == 0xEF &&
-            (buf[1].toInt() and 0xFF) == 0xBB && (buf[2].toInt() and 0xFF) == 0xBF
-        if (bom) "UTF-8(BOM)" else sniffCharset(buf)
-    } catch (t: Throwable) {
-        "UNKNOWN"
+    fun sniff(path: String): String {
+        // 表达式体里不能 return（K1 会直接报错），改为块体。
+        return try {
+            val f = File(path)
+            val size = minOf(f.length(), 64L * 1024L).toInt()
+            if (size <= 0) return "EMPTY"
+            val buf = ByteArray(size)
+            FileInputStream(f).use { it.read(buf) }
+            val bom = buf.size >= 3 && (buf[0].toInt() and 0xFF) == 0xEF &&
+                (buf[1].toInt() and 0xFF) == 0xBB && (buf[2].toInt() and 0xFF) == 0xBF
+            if (bom) "UTF-8(BOM)" else sniffCharset(buf)
+        } catch (t: Throwable) {
+            "UNKNOWN"
+        }
     }
 
     fun convertFile(path: String, from: String, to: String, withBom: Boolean = false): Boolean = try {

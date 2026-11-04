@@ -100,7 +100,7 @@ fun TerminalScreen() {
                         }
                     }
                     val body = result.output.trimEnd().ifBlank { "[无输出]" }
-                    lines = lines + body + "\n— exit " + result.code + " —"
+                    lines = lines + (body + "\n— exit " + result.code + " —")
                     if (lines.size > 400) lines = lines.takeLast(400)
                     running = false
                 }

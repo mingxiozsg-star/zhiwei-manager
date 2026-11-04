@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -294,8 +296,8 @@ fun HexViewerScreen(initialPath: String) {
             }
         }
         HorizontalDivider()
-        androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize()) {
-            androidx.compose.foundation.lazy.items(lines) { line ->
+        LazyColumn(Modifier.fillMaxSize()) {
+            items(lines) { line ->
                 Column(Modifier.fillMaxWidth().padding(vertical = 1.dp)) {
                     Text(
                         "${java.lang.Long.toHexString(line.offset).padStart(8, '0').uppercase()}  ${line.hex}",

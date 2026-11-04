@@ -77,3 +77,26 @@ object FileRepo {
 
     fun kindLabel(ext: String): String = ext.uppercase(Locale.US).ifEmpty { "FILE" }
 }
+
+/** File → FileItem 的映射（原本缺失导致 FileRepo 无法编译）。 */
+private fun File.toItem(): FileItem = FileItem(
+    name = name,
+    path = absolutePath,
+    isDir = isDirectory,
+    size = if (isDirectory) -1L else length(),
+    lastModified = lastModified(),
+    isSymlink = isSymbolicLinkCompat(this),
+    hidden = name.startsWith("."),
+    readable = canRead(),
+    writable = canWrite()
+)
+
+private fun isSymbolicLinkCompat(file: File): Boolean = try {
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+        java.nio.file.Files.isSymbolicLink(file.toPath())
+    } else {
+        false
+    }
+} catch (t: Throwable) {
+    false
+}

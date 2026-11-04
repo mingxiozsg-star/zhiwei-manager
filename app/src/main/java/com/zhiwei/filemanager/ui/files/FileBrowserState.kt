@@ -44,7 +44,7 @@ class PaneState(initialPath: String) {
         open(parent)
     }
 
-    fun setKeyword(k: String) {
+    fun updateKeyword(k: String) {
         keyword = k
     }
 
@@ -101,7 +101,7 @@ class FileBrowserState {
         } else {
             panes += PaneState(AppPrefs.lastRightPath).also { it.refresh() }
         }
-        AppPrefs.setDualPane(panes.size > 1)
+        AppPrefs.updateDualPane(panes.size > 1)
         activeIndex = activeIndex.coerceIn(0, panes.size - 1)
         return panes.size > 1
     }
@@ -109,14 +109,14 @@ class FileBrowserState {
     fun addPane(path: String = "/sdcard") {
         panes += PaneState(path).also { it.refresh() }
         activeIndex = panes.size - 1
-        AppPrefs.setDualPane(panes.size > 1)
+        AppPrefs.updateDualPane(panes.size > 1)
     }
 
     fun closePane(index: Int) {
         if (panes.size <= 1) return
         panes.removeAt(index)
         activeIndex = activeIndex.coerceIn(0, panes.size - 1)
-        AppPrefs.setDualPane(panes.size > 1)
+        AppPrefs.updateDualPane(panes.size > 1)
     }
 
     fun setClipboard(paths: List<String>, cut: Boolean) {

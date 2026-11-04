@@ -119,7 +119,7 @@ fun AppRoot() {
                     if (route == null && tab == MainTab.FILES) {
                         GlyphAction(if (state.panes.size > 1) "▥" else "▢") { state.toggleDualPane() }
                         GlyphAction(if (AppPrefs.showHidden) "◉" else "○") {
-                            AppPrefs.setShowHidden(!AppPrefs.showHidden)
+                            AppPrefs.updateShowHidden(!AppPrefs.showHidden)
                             state.panes.forEach { it.refresh() }
                         }
                         GlyphAction("⟳") { state.panes.forEach { it.refresh() } }

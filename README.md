@@ -170,5 +170,6 @@ Starting in Kotlin 2.0, the Compose Compiler Gradle plugin is required when comp
 ## 六、辅助脚本
 
 - `tools/check_kotlin.py <dir>`：Kotlin 源文件括号/引号平衡校验
+- `tools/scan_expr_return.py <dir>`：粗筛「表达式体函数里出现 return」这类必然编译失败的写法
 - `tools/check_refs.py <dir>`：跨文件静态调用名字级检查（发现拼写/漏实现）
 - `setup_android_env.sh`：Ubuntu/proot 环境下重建 Android 工具链（JDK 17 + Gradle 9.1.0 + SDK/NDK）

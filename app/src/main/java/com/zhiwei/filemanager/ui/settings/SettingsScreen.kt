@@ -82,7 +82,7 @@ fun SettingsScreen(state: FileBrowserState, onOpenTerminal: () -> Unit = {}) {
                 label = "主题",
                 options = listOf("跟随系统", "深色", "浅色"),
                 selected = AppPrefs.themeMode
-            ) { AppPrefs.setThemeMode(it) }
+            ) { AppPrefs.updateThemeMode(it) }
         }
 
         SectionCard("浏览与操作") {
@@ -90,14 +90,14 @@ fun SettingsScreen(state: FileBrowserState, onOpenTerminal: () -> Unit = {}) {
                 state.toggleDualPane()
             }
             SwitchRow("显示隐藏文件", AppPrefs.showHidden) {
-                AppPrefs.setShowHidden(!AppPrefs.showHidden)
+                AppPrefs.updateShowHidden(!AppPrefs.showHidden)
                 state.panes.forEach { it.refresh() }
             }
             ChoiceRow(
                 label = "编辑器默认编码",
                 options = listOf("UTF-8", "GBK", "GB18030", "ISO-8859-1"),
                 selected = listOf("UTF-8", "GBK", "GB18030", "ISO-8859-1").indexOf(AppPrefs.editorCharset).coerceAtLeast(0)
-            ) { AppPrefs.setEditorCharset(listOf("UTF-8", "GBK", "GB18030", "ISO-8859-1")[it]) }
+            ) { AppPrefs.updateEditorCharset(listOf("UTF-8", "GBK", "GB18030", "ISO-8859-1")[it]) }
             InfoRow("当前窗口", state.active.path)
         }
 
@@ -116,7 +116,7 @@ fun SettingsScreen(state: FileBrowserState, onOpenTerminal: () -> Unit = {}) {
             HorizontalDivider(Modifier.padding(vertical = 6.dp))
             InfoRow("ROOT 通道", rootText)
             SwitchRow("使用 ROOT 执行高危操作", AppPrefs.rootEnabled) {
-                AppPrefs.setRootEnabled(!AppPrefs.rootEnabled)
+                AppPrefs.updateRootEnabled(!AppPrefs.rootEnabled)
             }
             ActionRow("重新检测 ROOT") {
                 rootText = "检测中…"

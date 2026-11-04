@@ -50,7 +50,7 @@ object AppPrefs {
         editorCharset = sp.getString("editorCharset", "UTF-8") ?: "UTF-8"
     }
 
-    fun setShowHidden(v: Boolean) {
+    fun updateShowHidden(v: Boolean) {
         showHidden = v
         sp.edit().putBoolean("showHidden", v).apply()
     }
@@ -61,7 +61,7 @@ object AppPrefs {
         sp.edit().putString("sortMode", mode.name).putString("sortOrder", order.name).apply()
     }
 
-    fun setDualPane(v: Boolean) {
+    fun updateDualPane(v: Boolean) {
         dualPane = v
         sp.edit().putBoolean("dualPane", v).apply()
     }
@@ -72,22 +72,22 @@ object AppPrefs {
         sp.edit().putString("lastLeftPath", left).putString("lastRightPath", right).apply()
     }
 
-    fun setThemeMode(v: Int) {
+    fun updateThemeMode(v: Int) {
         themeMode = v
         sp.edit().putInt("themeMode", v).apply()
     }
 
-    fun setRootEnabled(v: Boolean) {
+    fun updateRootEnabled(v: Boolean) {
         rootEnabled = v
         sp.edit().putBoolean("rootEnabled", v).apply()
     }
 
-    fun setShizukuEnabled(v: Boolean) {
+    fun updateShizukuEnabled(v: Boolean) {
         shizukuEnabled = v
         sp.edit().putBoolean("shizukuEnabled", v).apply()
     }
 
-    fun setEditorCharset(v: String) {
+    fun updateEditorCharset(v: String) {
         editorCharset = v
         sp.edit().putString("editorCharset", v).apply()
     }

@@ -258,7 +258,7 @@ private fun PaneBox(
         if (searching) {
             OutlinedTextField(
                 value = pane.keyword,
-                onValueChange = { pane.setKeyword(it) },
+                onValueChange = { pane.updateKeyword(it) },
                 label = { Text("在当前目录搜索") },
                 singleLine = true,
                 modifier = Modifier
@@ -547,7 +547,7 @@ private fun SortDialog(onClose: () -> Unit) {
                     }
                 }
                 item {
-                    TextButton(onClick = { AppPrefs.setShowHidden(!AppPrefs.showHidden) }) {
+                    TextButton(onClick = { AppPrefs.updateShowHidden(!AppPrefs.showHidden) }) {
                         Text("隐藏文件：${if (AppPrefs.showHidden) "显示" else "隐藏"}")
                     }
                 }

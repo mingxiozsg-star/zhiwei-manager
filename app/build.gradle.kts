@@ -4,7 +4,10 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
+    // 只补 Compose 编译器子插件。Kotlin 本体由 AGP 9 内建（android.builtInKotlin 默认开启），
+    // 再应用 org.jetbrains.kotlin.android 会与内建注册的 `kotlin` 扩展重名 → 构建直接失败。
+    // 但 Compose 编译器 **必须** 显式应用：AGP 的 VariantTaskManager 在
+    // buildFeatures.compose=true 且未检测到该插件时，会以 MISSING_COMPOSE_COMPILER_GRADLE_PLUGIN 报错终止。
     alias(libs.plugins.kotlin.compose)
 }
 
@@ -92,8 +95,8 @@ android {
     }
 }
 
-// Kotlin 编译目标必须与上方 compileOptions(Java 17) 一致，
-// 否则 AGP 的 JVM-target 一致性校验会直接判定构建失败。
+// AGP 内建 Kotlin 会把 jvmTarget 与 Java 目标对齐，这里显式再声明一次作为兜底，
+// 避免出现 "Inconsistent JVM-target" 这类硬失败（Kotlin DSL 由 AGP 传递引入）。
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
@@ -118,6 +121,9 @@ if (aapt2Classifier != null) {
 
 dependencies {
     coreLibraryDesugaring(libs.desugar.jdk.libs)
+
+    // AGP 内建 Kotlin 不保证自动注入 stdlib，显式声明保证 Kotlin 源码可编译
+    implementation(libs.kotlin.stdlib)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

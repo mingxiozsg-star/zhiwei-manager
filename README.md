@@ -121,22 +121,51 @@ GitHub → Actions → Android CI → Run workflow
 - 打 `v*` 标签时会自动创建 GitHub Release 并挂上 APK
 - 本地 aarch64（proot）环境下 `aapt2` 会自动切到 `linux-aarch64`，云端 x86_64 用默认分发
 
-### 工具链版本矩阵（已实测对齐）
+### 工具链版本矩阵（已在 CI 实测校正）
 | 组件 | 版本 | 说明 |
 | --- | --- | --- |
 | Gradle | 9.1.0 | Wrapper 固化，AGP 9 要求 Gradle 9.x |
 | AGP | 9.0.0 | 字节码 Java 11 基线，JDK 17 可运行 |
-| Kotlin / KGP | 2.2.10 | 与 AGP 9.0.0 依赖树内的 kotlin-gradle-plugin 严格一致，避免 DSL 二进制错配 |
+| Kotlin / KGP | 2.2.10（跟随 AGP 依赖树） | **不应用** `org.jetbrains.kotlin.android`（AGP 内建，见坑位 1）；版本号仅用于对齐 Compose 子插件 |
+| Compose 编译器 | 2.2.10（`org.jetbrains.kotlin.plugin.compose`） | 必须显式应用，AGP 不会自动注入（见坑位 2） |
 | compileSdk / targetSdk | 35 | Compose 1.10.2、material3 1.4.0、core 1.16.0 的 `minCompileSdk` 均为 35 |
 | minSdk | 24 | 无多 dex 需求 |
-| JVM target | 17 | Kotlin 与 Java 必须一致，否则一致性校验直接失败 |
+| JVM target | 17 | 显式声明一次作为兜底，防止 JVM-target 一致性校验失败 |
 
-两个容易踩的构建坑（已修）：
-1. **Kotlin 插件必须显式声明**。AGP 9 虽然内置 `com.android.built-in-kotlin`，但它被
-   `android.experimental.declarative`（默认 **false**）开关守门，默认不会启用；缺失
-   `org.jetbrains.kotlin.android` 会导致 Kotlin 源码根本不参与编译。
-2. **Kotlin 版本不要高于 AGP 编译期依赖的 KGP**。AGP 9.0.0 编译期绑定 KGP 2.2.10，
-   刻意升到 2.3.x 可能触发 DSL 层二进制不兼容。
+**坑位 1：AGP 9 的 Kotlin 支持是内建的，手动应用 KGP 会直接崩。**
+实测证据（CI Run #41737746093，commit `68084317`）：
+
+```
+* What went wrong:
+An exception occurred applying plugin request [id: 'org.jetbrains.kotlin.android', version: '2.2.10']
+> Failed to apply plugin 'org.jetbrains.kotlin.android'.
+   > Cannot add extension with name 'kotlin', as there is an extension already registered with that name.
+```
+
+机理：`BooleanOption.BUILT_IN_KOTLIN`（`android.builtInKotlin`）默认值为 **true**，
+`BasePlugin.configureProject` 会调 `BuiltInKotlinServicesKt.initBuiltInKotlinSupportIfRequired`，
+由 AGP 通过 KGP 的 `KotlinBaseApiPlugin.createKotlinAndroidExtension()` 自行注册名为 `kotlin`、
+类型为 `KotlinAndroidProjectExtension` 的扩展。随后脚本再 apply KGP，KGP 重复 `createKotlinExtension` → 崩。
+
+因此 `plugins {}` 里 **只保留 `com.android.application`**。KGP 版本跟随 AGP 依赖树
+（9.0.0 的 POM 绑定 kotlin-gradle-plugin 2.2.10），KGP 类仍以 runtime 依赖存在于 buildscript classpath，
+故 `kotlin { compilerOptions { … } }` 与 `import org.jetbrains.kotlin.gradle.dsl.JvmTarget` 均可用。
+兜底方案：`gradle.properties` 设 `android.builtInKotlin=false` 退回旧模型（AGP 10 会强制）。
+
+**坑位 2：Compose 编译器插件反过来必须手动应用（AGP 只在内建 Kotlin 的“声明式 DSL”路径才自动注入）。**
+反编译 AGP 9 的 `VariantTaskManager` 可见硬校验：只要任一组件 `buildFeatures.compose == true`、
+Kotlin 版本 ≥ 2.0，且 `KgpUtils.isComposeCompilerPluginApplied(project) == false`，
+就会以 `MISSING_COMPOSE_COMPILER_GRADLE_PLUGIN` 级别 **报错终止**：
+
+```
+Starting in Kotlin 2.0, the Compose Compiler Gradle plugin is required when compose is enabled.
+```
+
+`AppPlugin` 里唯一一处 `plugins.apply("org.jetbrains.kotlin.plugin.compose")` 位于
+`BooleanOption.USE_DECLARATIVE_INTERFACES` 为真的分支（默认关闭），经典路径不会走。
+因此 `:app` 模块必须显式写 `alias(libs.plugins.kotlin.compose)`（版本与 AGP 内建 KGP 对齐为 2.2.10）。
+该插件本身只注册 `composeCompiler` 扩展、实现 `KotlinCompilerPluginSupportPlugin`，
+会被 AGP 的 `addSubpluginOptionsForBuiltInKotlin` 扫描到并挂到内建 `KotlinCompilation` 上，不与内建 Kotlin 冲突。
 
 ## 六、辅助脚本
 

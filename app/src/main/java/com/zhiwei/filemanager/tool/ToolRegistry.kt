@@ -16,11 +16,13 @@ object ToolRegistry {
 
     val groups: List<Pair<String, List<Feature>>> = listOf(
         "文件管理" to listOf(
-            Feature("多窗口文件浏览（单/双窗、多标签）", FeatureStatus.READY),
+            Feature("多窗口文件浏览（单/双窗、多标签）", FeatureStatus.READY, "左右/上下双栏，分割线可拖动"),
             Feature("复制 / 剪切 / 粘贴 / 删除 / 重命名", FeatureStatus.READY),
             Feature("新建文件 / 文件夹 / 属性查看", FeatureStatus.READY),
             Feature("排序（名称/大小/日期/类型）与隐藏文件开关", FeatureStatus.READY),
-            Feature("多选与批量操作", FeatureStatus.READY),
+            Feature("多选 / 全选 / 反选与批量操作", FeatureStatus.READY),
+            Feature("打开方式 / 分享 / 复制路径", FeatureStatus.READY),
+            Feature("回收站（删除可还原、可清空）", FeatureStatus.READY, "/sdcard/.zhiwei_recycle"),
             Feature("搜索（当前目录 / 递归 / 内容匹配）", FeatureStatus.READY),
             Feature("书签 / 最近访问", FeatureStatus.READY),
             Feature("ROOT 授权访问文件系统", FeatureStatus.PARTIAL, "su 通道已接"),

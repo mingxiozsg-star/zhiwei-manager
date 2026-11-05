@@ -45,6 +45,7 @@ import com.zhiwei.filemanager.tool.ToolRegistry
 import com.zhiwei.filemanager.ui.files.FileBrowserScreen
 import com.zhiwei.filemanager.ui.files.FileBrowserState
 import com.zhiwei.filemanager.ui.files.FileNav
+import com.zhiwei.filemanager.ui.files.RecycleBinScreen
 import com.zhiwei.filemanager.ui.settings.SettingsScreen
 import com.zhiwei.filemanager.ui.tasks.TaskBoardScreen
 import com.zhiwei.filemanager.ui.terminal.TerminalScreen
@@ -72,6 +73,7 @@ private enum class MainTab(val label: String, val glyph: String) {
 private sealed interface Route {
     data class Tool(val page: ToolPage, val path: String) : Route
     data object Terminal : Route
+    data object RecycleBin : Route
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -90,7 +92,8 @@ fun AppRoot() {
             toast = { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() },
             openRename = { paths -> route = Route.Tool(ToolPage.BATCH_RENAME, paths.joinToString("\n")) },
             openCompare = { a, b -> route = Route.Tool(ToolPage.COMPARE, a + "\n" + b) },
-            openMerge = { dir -> route = Route.Tool(ToolPage.MERGE, dir) }
+            openMerge = { dir -> route = Route.Tool(ToolPage.MERGE, dir) },
+            openRecycle = { route = Route.RecycleBin }
         )
     }
 
@@ -188,6 +191,7 @@ private data class RouteKey(val route: Route?, val tab: MainTab)
 
 @Composable
 private fun RouteHost(r: Route, onBack: () -> Unit) {
+    val context = LocalContext.current
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
@@ -198,6 +202,7 @@ private fun RouteHost(r: Route, onBack: () -> Unit) {
                 text = when (r) {
                     is Route.Tool -> r.page.desc
                     Route.Terminal -> "内置 shell 会话：普通权限 / ROOT / Shizuku 三通道"
+                    Route.RecycleBin -> "删除项集中管理：可还原到原位置，也可彻底清除"
                 },
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -223,6 +228,7 @@ private fun RouteHost(r: Route, onBack: () -> Unit) {
                     ToolPage.EDITOR -> EditorScreen(r.path.ifBlank { "/sdcard" })
                 }
                 Route.Terminal -> TerminalScreen()
+                Route.RecycleBin -> RecycleBinScreen(onToast = { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() })
             }
         }
     }
@@ -243,6 +249,7 @@ private fun GlyphAction(glyph: String, tint: Color? = null, onClick: () -> Unit)
 private fun topTitle(route: Route?, tab: MainTab, state: FileBrowserState): String = when (route) {
     is Route.Tool -> route.page.title
     Route.Terminal -> "终端模拟器"
+    Route.RecycleBin -> "回收站"
     null -> if (tab == MainTab.FILES) state.active.title else tab.label
 }
 

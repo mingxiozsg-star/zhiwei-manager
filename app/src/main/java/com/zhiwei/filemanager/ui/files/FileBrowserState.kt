@@ -64,6 +64,13 @@ class PaneState(initialPath: String) {
         selected.addAll(visibleItems().map { it.path })
     }
 
+    fun invertSelection() {
+        val current = selected.toSet()
+        val next = visibleItems().map { it.path }.filter { !current.contains(it) }
+        selected.clear()
+        selected.addAll(next)
+    }
+
     fun clearSelection() = selected.clear()
 }
 

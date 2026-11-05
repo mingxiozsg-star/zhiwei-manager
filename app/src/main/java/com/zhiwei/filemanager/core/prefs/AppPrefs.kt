@@ -34,6 +34,15 @@ object AppPrefs {
         private set
     var editorCharset by mutableStateOf("UTF-8")
         private set
+    /** 双窗口排列：true=左右两栏（MT 默认），false=上下两栏。 */
+    var splitLeftRight by mutableStateOf(true)
+        private set
+    /** 左右（或上下）分割比例。 */
+    var splitFraction by mutableStateOf(0.5f)
+        private set
+    /** 删除时移入回收站而非直接销毁。 */
+    var recycleEnabled by mutableStateOf(true)
+        private set
 
     fun init(ctx: Context) {
         if (::sp.isInitialized) return
@@ -41,13 +50,16 @@ object AppPrefs {
         showHidden = sp.getBoolean("showHidden", false)
         sortMode = runCatching { SortMode.valueOf(sp.getString("sortMode", SortMode.NAME.name)!!) }.getOrDefault(SortMode.NAME)
         sortOrder = runCatching { SortOrder.valueOf(sp.getString("sortOrder", SortOrder.ASC.name)!!) }.getOrDefault(SortOrder.ASC)
-        dualPane = sp.getBoolean("dualPane", false)
+        dualPane = sp.getBoolean("dualPane", true)
         lastLeftPath = sp.getString("lastLeftPath", "/sdcard") ?: "/sdcard"
         lastRightPath = sp.getString("lastRightPath", "/sdcard/Download") ?: "/sdcard/Download"
         themeMode = sp.getInt("themeMode", 0)
         rootEnabled = sp.getBoolean("rootEnabled", false)
         shizukuEnabled = sp.getBoolean("shizukuEnabled", true)
         editorCharset = sp.getString("editorCharset", "UTF-8") ?: "UTF-8"
+        splitLeftRight = sp.getBoolean("splitLeftRight", true)
+        splitFraction = sp.getFloat("splitFraction", 0.5f)
+        recycleEnabled = sp.getBoolean("recycleEnabled", true)
     }
 
     fun updateShowHidden(v: Boolean) {
@@ -90,5 +102,20 @@ object AppPrefs {
     fun updateEditorCharset(v: String) {
         editorCharset = v
         sp.edit().putString("editorCharset", v).apply()
+    }
+
+    fun updateSplitLeftRight(v: Boolean) {
+        splitLeftRight = v
+        sp.edit().putBoolean("splitLeftRight", v).apply()
+    }
+
+    fun updateSplitFraction(v: Float) {
+        splitFraction = v.coerceIn(0.2f, 0.8f)
+        sp.edit().putFloat("splitFraction", splitFraction).apply()
+    }
+
+    fun updateRecycleEnabled(v: Boolean) {
+        recycleEnabled = v
+        sp.edit().putBoolean("recycleEnabled", v).apply()
     }
 }

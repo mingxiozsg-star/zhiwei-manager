@@ -5,13 +5,17 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -41,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -49,6 +54,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.zhiwei.filemanager.core.fs.FileOps
 import com.zhiwei.filemanager.core.fs.FileRepo
+import com.zhiwei.filemanager.core.fs.RecycleBin
 import com.zhiwei.filemanager.core.model.FileItem
 import com.zhiwei.filemanager.core.model.SortMode
 import com.zhiwei.filemanager.core.model.SortOrder
@@ -67,6 +73,7 @@ import com.zhiwei.filemanager.ui.theme.KindOther
 import com.zhiwei.filemanager.ui.theme.KindPdf
 import com.zhiwei.filemanager.ui.theme.KindText
 import com.zhiwei.filemanager.ui.theme.KindVideo
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -83,7 +90,9 @@ data class FileNav(
     /** 左右两侧路径对比（可为文件或目录）。 */
     val openCompare: (String, String) -> Unit = { _, _ -> },
     /** 打开文本批量合并（带默认目录）。 */
-    val openMerge: (String) -> Unit = {}
+    val openMerge: (String) -> Unit = {},
+    /** 打开回收站。 */
+    val openRecycle: () -> Unit = {}
 )
 
 private sealed interface FileDialog {
@@ -108,19 +117,69 @@ fun FileBrowserScreen(state: FileBrowserState, nav: FileNav) {
             onBookmarks = { bookmarkOpen = true },
             onSearch = { searchOpen = true }
         )
-        state.panes.forEachIndexed { index, pane ->
+        if (state.panes.size > 1) {
+            BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
+                val spanPx = (if (AppPrefs.splitLeftRight) constraints.maxWidth else constraints.maxHeight).toFloat().coerceAtLeast(1f)
+                if (AppPrefs.splitLeftRight) {
+                    Row(Modifier.fillMaxSize()) {
+                        state.panes.forEachIndexed { index, pane ->
+                            PaneBox(
+                                state = state,
+                                pane = pane,
+                                index = index,
+                                active = state.activeIndex == index,
+                                nav = nav,
+                                onDialog = { dialog = it },
+                                onLongPress = { dialog = FileDialog.ItemMenu(it) },
+                                modifier = Modifier.weight(paneWeight(state, index)).fillMaxHeight()
+                            )
+                            if (index < state.panes.size - 1) {
+                                SplitHandle(vertical = true) { delta ->
+                                    AppPrefs.updateSplitFraction(AppPrefs.splitFraction + delta / spanPx)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Column(Modifier.fillMaxSize()) {
+                        state.panes.forEachIndexed { index, pane ->
+                            PaneBox(
+                                state = state,
+                                pane = pane,
+                                index = index,
+                                active = state.activeIndex == index,
+                                nav = nav,
+                                onDialog = { dialog = it },
+                                onLongPress = { dialog = FileDialog.ItemMenu(it) },
+                                modifier = Modifier.weight(paneWeight(state, index)).fillMaxWidth()
+                            )
+                            if (index < state.panes.size - 1) {
+                                SplitHandle(vertical = false) { delta ->
+                                    AppPrefs.updateSplitFraction(AppPrefs.splitFraction + delta / spanPx)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
             PaneBox(
                 state = state,
-                pane = pane,
-                index = index,
+                pane = state.panes[0],
+                index = 0,
+                active = true,
                 nav = nav,
                 onDialog = { dialog = it },
                 onLongPress = { dialog = FileDialog.ItemMenu(it) },
                 modifier = Modifier.weight(1f)
             )
-            if (index < state.panes.size - 1) HorizontalDivider()
         }
-        BottomBar(state, nav, onDialog = { dialog = it })
+        BottomBar(
+            state = state,
+            nav = nav,
+            onDialog = { dialog = it },
+            onRecycle = { nav.openRecycle() }
+        )
     }
 
     if (bookmarkOpen) {
@@ -222,6 +281,11 @@ private fun PaneTabs(
         TextButton(onClick = { state.toggleDualPane() }) {
             Text(if (state.panes.size > 1) "单窗" else "双窗", fontSize = 12.sp)
         }
+        if (state.panes.size > 1) {
+            TextButton(onClick = { AppPrefs.updateSplitLeftRight(!AppPrefs.splitLeftRight) }) {
+                Text(if (AppPrefs.splitLeftRight) "左右⇋" else "上下⇅", fontSize = 12.sp)
+            }
+        }
         TextButton(onClick = { state.addPane("/sdcard") }) { Text("+窗口", fontSize = 12.sp) }
         TextButton(onClick = onBookmarks) { Text("★ 收藏", fontSize = 12.sp) }
         TextButton(onClick = onSearch) { Text("🔍 搜索", fontSize = 12.sp) }
@@ -233,6 +297,7 @@ private fun PaneBox(
     state: FileBrowserState,
     pane: PaneState,
     index: Int,
+    active: Boolean,
     nav: FileNav,
     onDialog: (FileDialog) -> Unit,
     onLongPress: (FileItem) -> Unit,
@@ -250,13 +315,32 @@ private fun PaneBox(
         loading = false
     }
 
-    Column(modifier.fillMaxWidth()) {
+    Column(
+        modifier
+            .fillMaxWidth()
+            .border(
+                width = if (active) 1.dp else 0.dp,
+                color = if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.55f) else Color.Transparent
+            )
+    ) {
         Row(
             Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 4.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Text(
+                text = if (state.panes.size > 1) (if (index == 0) "左" else "右") else "窗口",
+                fontSize = 11.sp,
+                color = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .background(
+                        color = if (active) MaterialTheme.colorScheme.primary else Color.Transparent,
+                        shape = RoundedCornerShape(4.dp)
+                    )
+                    .clickable { state.setActive(index) }
+                    .padding(horizontal = 5.dp, vertical = 2.dp)
+            )
             TextButton(onClick = { pane.up() }) { Text("↑") }
             Text(
                 text = pane.path,
@@ -329,6 +413,7 @@ private fun PaneBox(
                     selecting = pane.selected.isNotEmpty(),
                     onToggle = { pane.toggle(item) },
                     onClick = {
+                        state.setActive(index)
                         if (pane.selected.isNotEmpty()) {
                             pane.toggle(item)
                         } else if (item.isDir) {
@@ -337,12 +422,55 @@ private fun PaneBox(
                             openFile(context, item, nav)
                         }
                     },
-                    onLongClick = { onLongPress(item) },
+                    onLongClick = {
+                        state.setActive(index)
+                        onLongPress(item)
+                    },
                     onText = { pane.open(item.path) }
                 )
             }
         }
         PaneStatusBar(pane = pane, list = list)
+    }
+}
+
+/** 双窗口的权重：两栏时按分割比例分配，多栏时等分。 */
+private fun paneWeight(state: FileBrowserState, index: Int): Float {
+    if (state.panes.size != 2) return 1f
+    val f = AppPrefs.splitFraction
+    return if (index == 0) f else 1f - f
+}
+
+/** 双窗口之间的可拖动分隔条：左右布局时竖向，上下布局时横向。 */
+@Composable
+private fun SplitHandle(vertical: Boolean, onDrag: (Float) -> Unit) {
+    val barColor = MaterialTheme.colorScheme.outlineVariant
+    if (vertical) {
+        Box(
+            Modifier
+                .width(12.dp)
+                .fillMaxHeight()
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .pointerInput(Unit) {
+                    detectDragGestures { _, drag -> onDrag(drag.x) }
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Box(Modifier.width(2.dp).height(30.dp).background(barColor))
+        }
+    } else {
+        Box(
+            Modifier
+                .height(12.dp)
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .pointerInput(Unit) {
+                    detectDragGestures { _, drag -> onDrag(drag.y) }
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Box(Modifier.height(2.dp).width(30.dp).background(barColor))
+        }
     }
 }
 
@@ -506,7 +634,12 @@ private fun kindColor(kind: FileKind): Color = when (kind) {
 }
 
 @Composable
-private fun BottomBar(state: FileBrowserState, nav: FileNav, onDialog: (FileDialog) -> Unit) {
+private fun BottomBar(
+    state: FileBrowserState,
+    nav: FileNav,
+    onDialog: (FileDialog) -> Unit,
+    onRecycle: () -> Unit
+) {
     val pane = state.active
     val scope = rememberCoroutineScope()
     Column(
@@ -514,6 +647,41 @@ private fun BottomBar(state: FileBrowserState, nav: FileNav, onDialog: (FileDial
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surfaceVariant)
     ) {
+        HorizontalDivider()
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (state.panes.size > 1) (if (state.activeIndex == 0) "左窗" else "右窗") else "单窗",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 6.dp)
+            )
+            TextButton(onClick = { pane.up() }) { Text("↑ 上级", fontSize = 12.sp) }
+            TextButton(onClick = { onDialog(newFolderDialog(pane, nav)) }) { Text("新建夹", fontSize = 12.sp) }
+            TextButton(onClick = { onDialog(newFileDialog(pane, nav)) }) { Text("新建文件", fontSize = 12.sp) }
+            if (state.clipboard.isNotEmpty()) {
+                TextButton(onClick = { pasteInto(state, pane, scope, nav) }) {
+                    Text("粘贴 ${state.clipboard.size} 项", fontSize = 12.sp)
+                }
+            }
+            TextButton(onClick = { pane.selectAll() }) { Text("全选", fontSize = 12.sp) }
+            TextButton(onClick = { pane.invertSelection() }) { Text("反选", fontSize = 12.sp) }
+            if (pane.selected.isNotEmpty()) {
+                TextButton(onClick = { pane.clearSelection() }) { Text("取消选择", fontSize = 12.sp) }
+            }
+            TextButton(onClick = onRecycle) { Text("回收站", fontSize = 12.sp) }
+            TextButton(onClick = { nav.openMerge(pane.path) }) { Text("合并文本", fontSize = 12.sp) }
+            if (state.panes.size > 1) {
+                TextButton(onClick = { nav.openCompare(pane.path, state.other?.path ?: "") }) {
+                    Text("对比双窗", fontSize = 12.sp)
+                }
+            }
+        }
         HorizontalDivider()
         Row(
             Modifier
@@ -571,43 +739,23 @@ private fun BottomBar(state: FileBrowserState, nav: FileNav, onDialog: (FileDial
                 }
                 TextButton(onClick = {
                     val paths = pane.selected.toList()
+                    val toRecycle = AppPrefs.recycleEnabled
                     onDialog(
-                        FileDialog.Confirm("删除", "确认删除 ${paths.size} 项？不可恢复。") {
-                            pane.clearSelection()
-                            scope.launch {
-                                withContext(Dispatchers.IO) { FileOps.delete(paths) }
-                                state.panes.forEach { it.refresh() }
-                            }
+                        FileDialog.Confirm(
+                            "删除",
+                            if (toRecycle) "将 ${paths.size} 项移入回收站？" else "永久删除 ${paths.size} 项？不可恢复。"
+                        ) {
+                            deleteSelection(state, pane, paths, scope, nav)
                         }
                     )
                 }) { Text("删除", fontSize = 12.sp) }
-                TextButton(onClick = { pane.selectAll() }) { Text("全选", fontSize = 12.sp) }
-                TextButton(onClick = { pane.clearSelection() }) { Text("取消", fontSize = 12.sp) }
             } else if (state.clipboard.isNotEmpty()) {
                 Text("剪贴板 ${state.clipboard.size} 项（${if (state.clipboardCut) "剪切" else "复制"}）", fontSize = 12.sp, modifier = Modifier.padding(horizontal = 8.dp))
-                TextButton(onClick = {
-                    val items = state.clipboard.toList()
-                    val cut = state.clipboardCut
-                    state.clearClipboard()
-                    scope.launch {
-                        withContext(Dispatchers.IO) {
-                            if (cut) FileOps.move(items, pane.path) else FileOps.copy(items, pane.path)
-                        }
-                        state.panes.forEach { it.refresh() }
-                    }
-                    nav.toast(if (cut) "移动中…" else "复制中…")
-                }) { Text("粘贴到此处", fontSize = 12.sp) }
+                TextButton(onClick = { pasteInto(state, pane, scope, nav) }) { Text("粘贴到此处", fontSize = 12.sp) }
                 TextButton(onClick = { state.clearClipboard() }) { Text("清空", fontSize = 12.sp) }
             } else {
-                TextButton(onClick = { nav.openMerge(pane.path) }) { Text("合并文本", fontSize = 12.sp) }
-                if (state.panes.size > 1) {
-                    TextButton(onClick = {
-                        val other = state.other ?: return@TextButton
-                        nav.openCompare(pane.path, other.path)
-                    }) { Text("对比双窗", fontSize = 12.sp) }
-                }
                 Text(
-                    "长按文件弹出菜单 · 「双窗」可并排操作并直接互传",
+                    "长按文件弹出菜单 · 双窗可并排互传 · 删除默认进回收站",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 8.dp)
@@ -763,12 +911,13 @@ private fun ItemMenuDialog(
                 }
                 item {
                     MenuRow("删除") {
+                        val toRecycle = AppPrefs.recycleEnabled
                         onDialog(
-                            FileDialog.Confirm("删除", "确认删除「${item.name}」？") {
-                                scope.launch {
-                                    withContext(Dispatchers.IO) { FileOps.delete(listOf(item.path)) }
-                                    state.panes.forEach { it.refresh() }
-                                }
+                            FileDialog.Confirm(
+                                "删除",
+                                if (toRecycle) "将「${item.name}」移入回收站？" else "永久删除「${item.name}」？不可恢复。"
+                            ) {
+                                deleteSelection(state, pane, listOf(item.path), scope, nav)
                             }
                         )
                     }
@@ -841,6 +990,50 @@ private fun newFolderDialog(pane: PaneState, nav: FileNav): FileDialog = FileDia
     } else {
         nav.toast("创建失败（无写入权限？）")
     }
+}
+
+private fun newFileDialog(pane: PaneState, nav: FileNav): FileDialog = FileDialog.Input("新建文件", "新建文件.txt", "创建") { name ->
+    if (FileOps.newFile(pane.path, name)) {
+        pane.refresh()
+        nav.toast("已创建：$name")
+    } else {
+        nav.toast("创建失败（无写入权限？）")
+    }
+}
+
+/** 粘贴剪贴板内容到指定窗口（跨窗口直接互传的底座）。 */
+private fun pasteInto(state: FileBrowserState, pane: PaneState, scope: CoroutineScope, nav: FileNav) {
+    val items = state.clipboard.toList()
+    if (items.isEmpty()) return
+    val cut = state.clipboardCut
+    state.clearClipboard()
+    scope.launch {
+        withContext(Dispatchers.IO) {
+            if (cut) FileOps.move(items, pane.path) else FileOps.copy(items, pane.path)
+        }
+        state.panes.forEach { it.refresh() }
+    }
+    nav.toast(if (cut) "移动中：${items.size} 项" else "复制中：${items.size} 项")
+}
+
+/** 删除：按偏好移入回收站，否则直接销毁。 */
+private fun deleteSelection(
+    state: FileBrowserState,
+    pane: PaneState,
+    paths: List<String>,
+    scope: CoroutineScope,
+    nav: FileNav
+) {
+    if (paths.isEmpty()) return
+    pane.clearSelection()
+    val toRecycle = AppPrefs.recycleEnabled
+    scope.launch {
+        withContext(Dispatchers.IO) {
+            if (toRecycle) RecycleBin.moveIn(paths) else FileOps.delete(paths)
+        }
+        state.panes.forEach { it.refresh() }
+    }
+    nav.toast(if (toRecycle) "已移入回收站：${paths.size} 项" else "已删除：${paths.size} 项")
 }
 
 private fun openFile(context: android.content.Context, item: FileItem, nav: FileNav) {

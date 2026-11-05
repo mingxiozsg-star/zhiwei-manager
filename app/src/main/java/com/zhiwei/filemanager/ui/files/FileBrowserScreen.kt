@@ -373,7 +373,7 @@ private fun PaneBox(
                     if (!fired && acc > threshold && (fromHeader || atTop)) {
                         fired = true
                         state.setActive(index)
-                        nav.toast("已切换到$tag窗口")
+                        nav.toast("已切换到${tag}窗口")
                     }
                     if (!change.pressed) break
                 }

@@ -30,6 +30,7 @@ import com.zhiwei.filemanager.tool.rename.CaseMode
 import com.zhiwei.filemanager.tool.rename.RenameOptions
 import com.zhiwei.filemanager.tool.rename.RenamePreviewItem
 import java.io.File
+import kotlinx.coroutines.launch
 
 /**
  * 批量重命名：先预览再执行。

@@ -198,8 +198,8 @@ object ArchiveTool {
         var failed = 0
         try {
             org.apache.commons.compress.archivers.sevenz.SevenZFile(f).use { sz ->
-                var entry = sz.nextEntry()
-                while (entry != null) {
+                while (true) {
+                    val entry = sz.nextEntry ?: break
                     val name = entry.name
                     val target = safeTarget(dest, name)
                     if (target == null) {
@@ -209,7 +209,9 @@ object ArchiveTool {
                     } else {
                         try {
                             target.parentFile?.mkdirs()
-                            BufferedOutputStream(FileOutputStream(target), BUF).use { out -> copy(sz, out) }
+                            BufferedOutputStream(FileOutputStream(target), BUF).use { out ->
+                                sz.getInputStream(entry).use { input -> copy(input, out) }
+                            }
                             ok++
                         } catch (t: Throwable) {
                             failed++
@@ -217,7 +219,6 @@ object ArchiveTool {
                     }
                     onProgress?.invoke(0.5f, name)
                     TaskCenter.update(taskId, 0.5f, name)
-                    entry = sz.nextEntry()
                 }
             }
         } catch (t: Throwable) {

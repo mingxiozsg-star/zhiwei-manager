@@ -29,6 +29,7 @@ import com.zhiwei.filemanager.core.task.AppScope
 import com.zhiwei.filemanager.tool.compare.CompareTool
 import com.zhiwei.filemanager.tool.diff.DiffTool
 import java.io.File
+import kotlinx.coroutines.launch
 
 /**
  * 文件与目录对比：左右两路可填文件或文件夹。

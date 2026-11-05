@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -45,7 +48,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -111,12 +116,15 @@ fun FileBrowserScreen(state: FileBrowserState, nav: FileNav) {
     var bookmarkOpen by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
 
+    // 顶栏放大镜 / 点击顶部目录标题 → 打开搜索（对齐 NP 的 SearchEditText）
+    LaunchedEffect(state.searchRequest) {
+        if (state.searchRequest) {
+            searchOpen = true
+            state.searchRequest = false
+        }
+    }
+
     Column(Modifier.fillMaxSize()) {
-        PaneTabs(
-            state = state,
-            onBookmarks = { bookmarkOpen = true },
-            onSearch = { searchOpen = true }
-        )
         if (state.panes.size > 1) {
             BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
                 val spanPx = (if (AppPrefs.splitLeftRight) constraints.maxWidth else constraints.maxHeight).toFloat().coerceAtLeast(1f)
@@ -174,11 +182,20 @@ fun FileBrowserScreen(state: FileBrowserState, nav: FileNav) {
                 modifier = Modifier.weight(1f)
             )
         }
-        BottomBar(
+        // NP 管理器风格图标操作栏：贴在我们自己的底栏上方
+        IconActionBar(
             state = state,
             nav = nav,
             onDialog = { dialog = it },
-            onRecycle = { nav.openRecycle() }
+            onSearch = { searchOpen = true },
+            onBookmarks = { bookmarkOpen = true },
+            onRecycle = { nav.openRecycle() },
+            scope = scope
+        )
+        BottomBar(
+            state = state,
+            nav = nav,
+            onDialog = { dialog = it }
         )
     }
 
@@ -233,62 +250,83 @@ fun FileBrowserScreen(state: FileBrowserState, nav: FileNav) {
     }
 }
 
+/** NP 管理器风格的图标操作栏：单行等分图标，浏览态 / 选中态两套按钮。 */
 @Composable
-private fun PaneTabs(
+private fun IconActionBar(
     state: FileBrowserState,
+    nav: FileNav,
+    onDialog: (FileDialog) -> Unit,
+    onSearch: () -> Unit,
     onBookmarks: () -> Unit,
-    onSearch: () -> Unit
+    onRecycle: () -> Unit,
+    scope: CoroutineScope
 ) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 6.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        state.panes.forEachIndexed { i, pane ->
-            val selected = state.activeIndex == i
-            Surface(
-                color = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier
-                    .padding(end = 6.dp)
-                    .clickable { state.setActive(i) }
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = if (i == 0) "窗口1 · ${pane.title}" else "窗口${i + 1} · ${pane.title}",
-                        fontSize = 12.sp,
-                        color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 10.dp, top = 6.dp, bottom = 6.dp, end = if (state.panes.size > 1) 2.dp else 10.dp),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (state.panes.size > 1) {
-                        Text(
-                            text = "×",
-                            fontSize = 14.sp,
-                            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier
-                                .clickable { state.closePane(i) }
-                                .padding(horizontal = 8.dp)
-                        )
+    val pane = state.active
+    val selecting = pane.selected.isNotEmpty()
+    Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
+        Row(Modifier.fillMaxWidth().height(54.dp)) {
+            if (!selecting) {
+                BarIcon("↑", "上级") { pane.up() }
+                BarIcon("＋", "新建") { onDialog(newFolderDialog(pane, nav)) }
+                BarIcon("🔍", "搜索") { onSearch() }
+                BarIcon("★", "收藏") { onBookmarks() }
+                BarIcon("♻", "回收站") { onRecycle() }
+            } else {
+                BarIcon("⧉", "复制", highlighted = true) {
+                    state.setClipboard(pane.selected.toList(), false)
+                    pane.clearSelection()
+                    nav.toast("已复制到剪贴板")
+                }
+                BarIcon("✂", "剪切") {
+                    state.setClipboard(pane.selected.toList(), true)
+                    pane.clearSelection()
+                    nav.toast("已剪切")
+                }
+                BarIcon("✎", "重命名") { nav.openRename(pane.selected.toList()) }
+                BarIcon("⤓", "压缩") {
+                    val paths = pane.selected.toList()
+                    val out = FileOps.uniqueTarget(pane.path, "archive_${System.currentTimeMillis() / 1000}.zip")
+                    pane.clearSelection()
+                    nav.toast("压缩中：${out.name}")
+                    scope.launch {
+                        withContext(Dispatchers.IO) { ArchiveTool.compressToZip(paths, out.absolutePath) }
+                        state.panes.forEach { it.refresh() }
                     }
+                }
+                BarIcon("✖", "删除", highlighted = true) {
+                    val paths = pane.selected.toList()
+                    val toRecycle = AppPrefs.recycleEnabled
+                    onDialog(
+                        FileDialog.Confirm(
+                            "删除",
+                            if (toRecycle) "将 ${paths.size} 项移入回收站？" else "永久删除 ${paths.size} 项？不可恢复。"
+                        ) { deleteSelection(state, pane, paths, scope, nav) }
+                    )
                 }
             }
         }
-        TextButton(onClick = { state.toggleDualPane() }) {
-            Text(if (state.panes.size > 1) "单窗" else "双窗", fontSize = 12.sp)
-        }
-        if (state.panes.size > 1) {
-            TextButton(onClick = { AppPrefs.updateSplitLeftRight(!AppPrefs.splitLeftRight) }) {
-                Text(if (AppPrefs.splitLeftRight) "左右⇋" else "上下⇅", fontSize = 12.sp)
-            }
-        }
-        TextButton(onClick = { state.addPane("/sdcard") }) { Text("+窗口", fontSize = 12.sp) }
-        TextButton(onClick = onBookmarks) { Text("★ 收藏", fontSize = 12.sp) }
-        TextButton(onClick = onSearch) { Text("🔍 搜索", fontSize = 12.sp) }
+    }
+}
+
+/** 图标栏里的单个按钮：等分宽度，图标在上、文字在下。 */
+@Composable
+private fun RowScope.BarIcon(
+    glyph: String,
+    label: String,
+    highlighted: Boolean = false,
+    onClick: () -> Unit
+) {
+    val tint = if (highlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+    Column(
+        Modifier
+            .weight(1f)
+            .fillMaxHeight()
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(glyph, fontSize = 16.sp, color = tint, maxLines = 1)
+        Text(label, fontSize = 10.sp, color = tint.copy(alpha = 0.8f), maxLines = 1)
     }
 }
 
@@ -305,14 +343,42 @@ private fun PaneBox(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
     var loading by remember { mutableStateOf(false) }
     var refreshKey by remember { mutableStateOf(0) }
-    var searching by remember { mutableStateOf(false) }
+    val tag = if (state.panes.size > 1) (if (index == 0) "左" else "右") else "窗口"
 
     LaunchedEffect(pane.path, refreshKey, AppPrefs.showHidden, AppPrefs.sortMode, AppPrefs.sortOrder) {
         loading = true
         withContext(Dispatchers.IO) { pane.refresh() }
         loading = false
+    }
+
+    // 手势：在本栏内向下滑 → 把操作焦点切到本栏（左栏下滑切左栏，右栏下滑切右栏）
+    val swipeToActivate = Modifier.pointerInput(index) {
+        val threshold = 56.dp.toPx()
+        val headerZone = 110.dp.toPx()
+        awaitPointerEventScope {
+            while (true) {
+                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                val fromHeader = down.position.y < headerZone
+                var acc = 0f
+                var fired = false
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    acc += change.positionChange().y
+                    if (acc < 0f) break
+                    val atTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+                    if (!fired && acc > threshold && (fromHeader || atTop)) {
+                        fired = true
+                        state.setActive(index)
+                        nav.toast("已切换到$tag窗口")
+                    }
+                    if (!change.pressed) break
+                }
+            }
+        }
     }
 
     Column(
@@ -322,38 +388,40 @@ private fun PaneBox(
                 width = if (active) 1.dp else 0.dp,
                 color = if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.55f) else Color.Transparent
             )
+            .then(swipeToActivate)
     ) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 2.dp),
+                .background(if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else Color.Transparent)
+                .clickable { state.setActive(index) }
+                .padding(start = 6.dp, end = 2.dp, top = 2.dp, bottom = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = if (state.panes.size > 1) (if (index == 0) "左" else "右") else "窗口",
-                fontSize = 11.sp,
+                text = tag,
+                fontSize = 10.sp,
                 color = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
                     .background(
-                        color = if (active) MaterialTheme.colorScheme.primary else Color.Transparent,
+                        color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
                         shape = RoundedCornerShape(4.dp)
                     )
-                    .clickable { state.setActive(index) }
-                    .padding(horizontal = 5.dp, vertical = 2.dp)
+                    .padding(horizontal = 5.dp, vertical = 1.dp)
             )
-            TextButton(onClick = { pane.up() }) { Text("↑") }
             Text(
-                text = pane.path,
+                text = pane.title,
                 fontSize = 12.sp,
+                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 6.dp),
+                color = MaterialTheme.colorScheme.onSurface
             )
-            TextButton(onClick = { searching = !searching }) { Text("搜", fontSize = 12.sp) }
-            TextButton(onClick = { refreshKey++ }) { Text("⟳") }
-            TextButton(onClick = { onDialog(FileDialog.Sort) }) { Text("排序", fontSize = 12.sp) }
-            TextButton(onClick = { onDialog(newFolderDialog(pane, nav)) }) { Text("新建", fontSize = 12.sp) }
+            HeaderGlyph("↑") { pane.up() }
+            HeaderGlyph("⟳") { refreshKey++ }
         }
 
         Row(
@@ -378,18 +446,6 @@ private fun PaneBox(
 
         QuickAccessRow(onOpen = { pane.open(it) })
 
-        if (searching) {
-            OutlinedTextField(
-                value = pane.keyword,
-                onValueChange = { pane.updateKeyword(it) },
-                label = { Text("在当前目录搜索") },
-                singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-            )
-        }
-
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
 
         pane.error?.let {
@@ -402,7 +458,7 @@ private fun PaneBox(
         }
 
         val list = pane.visibleItems()
-        LazyColumn(Modifier.fillMaxWidth().weight(1f, fill = false)) {
+        LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().weight(1f, fill = false)) {
             if (list.isEmpty() && !loading) {
                 item { EmptyHint(pane.path, pane.keyword) }
             }
@@ -439,6 +495,19 @@ private fun paneWeight(state: FileBrowserState, index: Int): Float {
     if (state.panes.size != 2) return 1f
     val f = AppPrefs.splitFraction
     return if (index == 0) f else 1f - f
+}
+
+/** 窗格标题条上的紧凑图标按钮（比 TextButton 省一半横向空间）。 */
+@Composable
+private fun HeaderGlyph(glyph: String, onClick: () -> Unit) {
+    Text(
+        text = glyph,
+        fontSize = 14.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .padding(horizontal = 9.dp, vertical = 4.dp)
+    )
 }
 
 /** 双窗口之间的可拖动分隔条：左右布局时竖向，上下布局时横向。 */
@@ -637,8 +706,7 @@ private fun kindColor(kind: FileKind): Color = when (kind) {
 private fun BottomBar(
     state: FileBrowserState,
     nav: FileNav,
-    onDialog: (FileDialog) -> Unit,
-    onRecycle: () -> Unit
+    onDialog: (FileDialog) -> Unit
 ) {
     val pane = state.active
     val scope = rememberCoroutineScope()
@@ -661,9 +729,6 @@ private fun BottomBar(
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(horizontal = 6.dp)
             )
-            TextButton(onClick = { pane.up() }) { Text("↑ 上级", fontSize = 12.sp) }
-            TextButton(onClick = { onDialog(newFolderDialog(pane, nav)) }) { Text("新建夹", fontSize = 12.sp) }
-            TextButton(onClick = { onDialog(newFileDialog(pane, nav)) }) { Text("新建文件", fontSize = 12.sp) }
             if (state.clipboard.isNotEmpty()) {
                 TextButton(onClick = { pasteInto(state, pane, scope, nav) }) {
                     Text("粘贴 ${state.clipboard.size} 项", fontSize = 12.sp)
@@ -674,7 +739,6 @@ private fun BottomBar(
             if (pane.selected.isNotEmpty()) {
                 TextButton(onClick = { pane.clearSelection() }) { Text("取消选择", fontSize = 12.sp) }
             }
-            TextButton(onClick = onRecycle) { Text("回收站", fontSize = 12.sp) }
             TextButton(onClick = { nav.openMerge(pane.path) }) { Text("合并文本", fontSize = 12.sp) }
             if (state.panes.size > 1) {
                 TextButton(onClick = { nav.openCompare(pane.path, state.other?.path ?: "") }) {

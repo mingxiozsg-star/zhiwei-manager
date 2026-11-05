@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -39,6 +41,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.zhiwei.filemanager.core.model.SortMode
+import com.zhiwei.filemanager.core.model.SortOrder
 import com.zhiwei.filemanager.core.prefs.AppPrefs
 import com.zhiwei.filemanager.core.util.AppInfo
 import com.zhiwei.filemanager.tool.ToolRegistry
@@ -83,6 +87,7 @@ fun AppRoot() {
     val state = remember { FileBrowserState() }
     var tab by remember { mutableStateOf(MainTab.FILES) }
     var route by remember { mutableStateOf<Route?>(null) }
+    var menuOpen by remember { mutableStateOf(false) }
 
     val nav = remember(state) {
         FileNav(
@@ -110,7 +115,11 @@ fun AppRoot() {
                     titleContentColor = MaterialTheme.colorScheme.onBackground
                 ),
                 title = {
-                    Column {
+                    Column(
+                        Modifier.clickable {
+                            if (route == null && tab == MainTab.FILES) state.searchRequest = true
+                        }
+                    ) {
                         Text(
                             text = topTitle(route, tab, state),
                             fontSize = 17.sp,
@@ -132,12 +141,61 @@ fun AppRoot() {
                 },
                 actions = {
                     if (route == null && tab == MainTab.FILES) {
-                        GlyphAction(if (state.panes.size > 1) "▥" else "▢") { state.toggleDualPane() }
-                        GlyphAction(if (AppPrefs.showHidden) "◉" else "○") {
-                            AppPrefs.updateShowHidden(!AppPrefs.showHidden)
-                            state.panes.forEach { it.refresh() }
+                        // 顶栏只留两个入口：放大镜搜索 + 更多菜单（杂乱按钮全部收进菜单）
+                        GlyphAction("🔍") { state.searchRequest = true }
+                        Box {
+                            GlyphAction("⋮") { menuOpen = true }
+                            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                                DropdownMenuItem(
+                                    text = { Text(if (state.panes.size > 1) "切换为单窗口" else "切换为双窗口") },
+                                    onClick = { menuOpen = false; state.toggleDualPane() }
+                                )
+                                if (state.panes.size > 1) {
+                                    DropdownMenuItem(
+                                        text = { Text(if (AppPrefs.splitLeftRight) "双窗改为上下排列" else "双窗改为左右排列") },
+                                        onClick = { menuOpen = false; AppPrefs.updateSplitLeftRight(!AppPrefs.splitLeftRight) }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("关闭右侧窗口") },
+                                        onClick = { menuOpen = false; state.closePane(state.panes.size - 1) }
+                                    )
+                                }
+                                DropdownMenuItem(
+                                    text = { Text(if (AppPrefs.showHidden) "隐藏系统隐藏文件" else "显示系统隐藏文件") },
+                                    onClick = {
+                                        menuOpen = false
+                                        AppPrefs.updateShowHidden(!AppPrefs.showHidden)
+                                        state.panes.forEach { it.refresh() }
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("排序方式：${AppPrefs.sortMode.label}") },
+                                    onClick = {
+                                        val all = SortMode.values()
+                                        AppPrefs.setSort(all[(AppPrefs.sortMode.ordinal + 1) % all.size], AppPrefs.sortOrder)
+                                        state.panes.forEach { it.refresh() }
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("排序方向：${AppPrefs.sortOrder.label}") },
+                                    onClick = {
+                                        AppPrefs.setSort(
+                                            AppPrefs.sortMode,
+                                            if (AppPrefs.sortOrder == SortOrder.ASC) SortOrder.DESC else SortOrder.ASC
+                                        )
+                                        state.panes.forEach { it.refresh() }
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("刷新两个窗口") },
+                                    onClick = { menuOpen = false; state.panes.forEach { it.refresh() } }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("回收站") },
+                                    onClick = { menuOpen = false; route = Route.RecycleBin }
+                                )
+                            }
                         }
-                        GlyphAction("⟳") { state.panes.forEach { it.refresh() } }
                     }
                 }
             )

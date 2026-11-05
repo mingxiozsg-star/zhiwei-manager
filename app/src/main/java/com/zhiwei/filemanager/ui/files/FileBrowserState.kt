@@ -85,6 +85,9 @@ class FileBrowserState {
     var clipboardCut by mutableStateOf(false)
         private set
 
+    /** 顶栏放大镜 / 点击顶部目录标题时置位，由文件页消费后清空。 */
+    var searchRequest by mutableStateOf(false)
+
     val active: PaneState
         get() = panes[activeIndex.coerceIn(0, panes.size - 1)]
 

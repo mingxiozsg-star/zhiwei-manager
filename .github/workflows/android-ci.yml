@@ -100,7 +100,13 @@ jobs:
           FP="$("${BT}apksigner" verify --print-certs "$APK" 2>/dev/null \
                 | grep -i 'certificate SHA-256 digest' | head -1 \
                 | sed 's/.*digest: *//' | tr -d ':' | tr 'A-Z' 'a-z')"
-          EXPECT="085348ded53a57b77c5149a33aef74def9fffc7cbf17fc9e1878930f89a6ab8a"
+          # 期望值**直接从构建用的 keystore 现算**，避免人手抄错；没有 keystore 时才用兜底常量。
+          if [ -f keystore.properties ] && [ -f release.jks ]; then
+            KSP="$(sed -n 's/^storePassword=//p' keystore.properties)"
+            EXPECT="$(keytool -list -v -keystore release.jks -storepass "${KSP}" 2>/dev/null \
+                      | sed -n 's/.*SHA256: *//p' | head -1 | tr -d ':' | tr 'A-Z' 'a-z')"
+          fi
+          EXPECT="${EXPECT:-085348ded53a57b77c5149a33aef74def9fffcc7bf17fc9e1878930f89a6ab8a}"
           echo "实际签名指纹: ${FP}"
           echo "期望签名指纹: ${EXPECT}"
           if [ -z "${FP}" ]; then

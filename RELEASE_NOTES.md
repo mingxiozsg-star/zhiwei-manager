@@ -10,7 +10,7 @@
   于是 v1.3.0 与 v1.4.0 的签名证书**完全不同**（SHA-256 分别为 `453f59af…`、`575915a7…`），
   系统据此判定为「不同开发者签的同一个包名」，直接拒绝覆盖安装。
 - 修复：改用固定 keystore，通过 GitHub Secrets 注入 CI（密钥不进公开仓库），
-  证书 SHA-256 = `085348ded53a57b77c5149a33aef74def9fffc7cbf17fc9e1878930f89a6ab8a`，此后恒定不变。
+  证书 SHA-256 = `085348ded53a57b77c5149a33aef74def9fffcc7bf17fc9e1878930f89a6ab8a`，此后恒定不变。
 - 加固：
   - release 改为 v1 + v2 + v3 三档签名全开，兼容老 ROM 与第三方安装器的签名校验；
   - CI 缺少 keystore Secrets 时，打 tag 直接失败，不再产出「签名不固定」的正式包；

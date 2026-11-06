@@ -29,7 +29,9 @@ class PaneState(initialPath: String) {
     fun refresh() {
         val raw = FileRepo.list(path, AppPrefs.showHidden)
         items = FileRepo.sort(raw, AppPrefs.sortMode, AppPrefs.sortOrder)
-        error = if (raw.isEmpty() && !File(path).canRead()) "无权限读取该目录（可尝试 Shizuku / ROOT）" else null
+        error = if (raw.isEmpty() && !File(path).canRead())
+            "该目录被系统限制，无法按路径读取（点下方「免提权浏览」用系统授权器授权即可）"
+        else null
         selected.retainAll { s -> items.any { it.path == s } }
     }
 
@@ -58,6 +60,11 @@ class PaneState(initialPath: String) {
     }
 
     fun isSelected(item: FileItem): Boolean = selected.contains(item.path)
+
+    /** 选中单项（滑动区间选择用；已在集合里则什么都不做）。 */
+    fun select(item: FileItem) {
+        if (!selected.contains(item.path)) selected.add(item.path)
+    }
 
     fun selectAll() {
         selected.clear()
@@ -93,6 +100,14 @@ class FileBrowserState {
 
     /** 折叠栏里的「书签与最近访问」：置位后由文件页打开书签面板，消费完清空。 */
     var bookmarkRequest by mutableStateOf(false)
+
+    /**
+     * 待弹出的安装包速览弹窗。
+     *
+     * 点 APK 十次里有九次只想「装它」，为此切走整页再等用户退出是反人类的，
+     * 所以预览 APK 一律走这个弹窗（安装 / 查看 / 更多），不再是整页。
+     */
+    var apkQuickRequest by mutableStateOf<FileItem?>(null)
 
     val active: PaneState
         get() = panes[activeIndex.coerceIn(0, panes.size - 1)]

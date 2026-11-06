@@ -120,5 +120,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: apk/**/*.apk
-          generate_release_notes: true
+          # 更新报告直接取仓库根的 RELEASE_NOTES.md（changelog 手写、可控，不靠提交信息自动拼）
+          body_path: RELEASE_NOTES.md
           fail_on_unmatched_files: false

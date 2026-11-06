@@ -3,6 +3,8 @@ package com.zhiwei.filemanager.ui.files
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -10,6 +12,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -24,6 +27,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -44,6 +48,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -120,6 +125,8 @@ fun FileBrowserScreen(state: FileBrowserState, nav: FileNav) {
     var searchOpen by remember { mutableStateOf(false) }
     // 「搜索文件夹」面板的目标窗口：点顶栏目录名或窗格目录名时置位（null = 关闭）
     var folderSearchPane by remember { mutableStateOf<PaneState?>(null) }
+    // 受限目录的免提权浏览面板：非空即展示（走 SAF 授权，不用 Shizuku / ROOT）
+    var safPath by remember { mutableStateOf<String?>(null) }
 
     // 顶栏放大镜 → 搜索「文件」；点击顶栏目录标题 → 搜索「文件夹」。
     LaunchedEffect(state.searchFileRequest) {
@@ -160,6 +167,7 @@ fun FileBrowserScreen(state: FileBrowserState, nav: FileNav) {
                                 onDialog = { dialog = it },
                                 onLongPress = { dialog = FileDialog.ItemMenu(it) },
                                 onSearchFolder = { folderSearchPane = pane },
+                                onSafBrowse = { safPath = it },
                                 modifier = Modifier.weight(paneWeight(state, index)).fillMaxHeight()
                             )
                             if (index < state.panes.size - 1) {
@@ -181,6 +189,7 @@ fun FileBrowserScreen(state: FileBrowserState, nav: FileNav) {
                                 onDialog = { dialog = it },
                                 onLongPress = { dialog = FileDialog.ItemMenu(it) },
                                 onSearchFolder = { folderSearchPane = pane },
+                                onSafBrowse = { safPath = it },
                                 modifier = Modifier.weight(paneWeight(state, index)).fillMaxWidth()
                             )
                             if (index < state.panes.size - 1) {
@@ -202,6 +211,7 @@ fun FileBrowserScreen(state: FileBrowserState, nav: FileNav) {
                 onDialog = { dialog = it },
                 onLongPress = { dialog = FileDialog.ItemMenu(it) },
                 onSearchFolder = { folderSearchPane = state.panes[0] },
+                onSafBrowse = { safPath = it },
                 modifier = Modifier.weight(1f)
             )
         }
@@ -239,6 +249,10 @@ fun FileBrowserScreen(state: FileBrowserState, nav: FileNav) {
             onClose = { folderSearchPane = null }
         )
     }
+    // 受限目录（Android/data 等）：走系统 SAF 授权浏览，不需要 Shizuku / ROOT
+    safPath?.let { path ->
+        SafBrowseSheet(initialPath = path, nav = nav, onClose = { safPath = null })
+    }
     when (val d = dialog) {
         null -> Unit
         is FileDialog.Input -> InputDialog(d) { dialog = null }
@@ -274,10 +288,24 @@ fun FileBrowserScreen(state: FileBrowserState, nav: FileNav) {
             nav = nav,
             onDialog = { dialog = it },
             onClose = { dialog = null },
-            onSearchFile = { dialog = null; state.searchFileRequest = true },
-            onSearchFolder = { target -> dialog = null; folderSearchPane = target },
             onBookmarks = { dialog = null; bookmarkOpen = true },
             onRecycle = { dialog = null; nav.openRecycle() },
+            scope = scope
+        )
+    }
+
+    // 安装包速览弹窗：点 APK、或动作里点「安装包信息」，都落到这里，不再切整页。
+    state.apkQuickRequest?.let { apk ->
+        ApkQuickDialog(
+            item = apk,
+            state = state,
+            nav = nav,
+            onDialog = { dialog = it },
+            onClose = { state.apkQuickRequest = null },
+            onAction = { msg ->
+                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                nav.toast(msg)
+            },
             scope = scope
         )
     }
@@ -296,8 +324,6 @@ private fun PaneMenuDialog(
     nav: FileNav,
     onDialog: (FileDialog) -> Unit,
     onClose: () -> Unit,
-    onSearchFile: () -> Unit,
-    onSearchFolder: (PaneState) -> Unit,
     onBookmarks: () -> Unit,
     onRecycle: () -> Unit,
     scope: CoroutineScope
@@ -399,8 +425,7 @@ private fun PaneMenuDialog(
                             }
                         }
                     }
-                    item { MenuRow("搜索文件（名称 / 内容）") { onSearchFile() } }
-                    item { MenuRow("搜索文件夹（下钻定位）") { onSearchFolder(pane) } }
+                    // 搜索统一收归顶栏（放大镜搜文件、点目录名搜文件夹），窗格里不再放重复入口
                     item { MenuRow("全选") { pane.selectAll(); onClose() } }
                     item { MenuRow("收藏与最近访问") { onBookmarks() } }
                     if (other != null) {
@@ -427,6 +452,8 @@ private fun PaneBox(
     onLongPress: (FileItem) -> Unit,
     /** 点击窗格目录名 = 在本窗口搜索文件夹。 */
     onSearchFolder: () -> Unit,
+    /** 受限目录（Android/data 等）：走系统 SAF 授权浏览，不需要 Shizuku / ROOT。 */
+    onSafBrowse: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -469,6 +496,30 @@ private fun PaneBox(
         }
     }
 
+    // 列表数据先算好：顶栏要显示「文件夹数 · 文件数 · 合计体积」，底下那条独立状态栏已删除
+    val list = pane.visibleItems()
+    val dirCount = list.count { it.isDir }
+    val counts = buildString {
+        append(dirCount).append(" 个文件夹 · ").append(list.size - dirCount).append(" 个文件")
+        if (list.isNotEmpty()) append(" · ").append(Format.size(list.sumOf { it.size }))
+    }
+
+    // 滑动多选的锚点：第一次滑到某行记住它，再滑到另一行时把两行之间的所有项一并选上
+    var swipeAnchor by remember(pane.path) { mutableStateOf(-1) }
+
+    fun swipeSelect(rowIndex: Int) {
+        if (list.isEmpty() || rowIndex !in list.indices) return
+        val anchor = swipeAnchor
+        if (anchor < 0 || anchor == rowIndex) {
+            pane.toggle(list[rowIndex])
+        } else {
+            for (i in minOf(anchor, rowIndex)..maxOf(anchor, rowIndex)) {
+                if (i in list.indices) pane.select(list[i])
+            }
+        }
+        swipeAnchor = rowIndex
+    }
+
     Column(
         modifier
             .fillMaxWidth()
@@ -487,17 +538,7 @@ private fun PaneBox(
         ) {
             // 三个点：本窗口的操作菜单（所有动作都收在这里）
             HeaderGlyph("⋮") { onDialog(FileDialog.PaneMenu(index)) }
-            // 文件夹图标：点它 = 返回上一层；路径已在根目录时隐藏（没有上一层可回）
-            val parent = FileRepo.parentOf(pane.path)
-            if (parent != null) {
-                Text(
-                    text = "📁",
-                    fontSize = 13.sp,
-                    modifier = Modifier
-                        .clickable { pane.up() }
-                        .padding(horizontal = 7.dp, vertical = 4.dp)
-                )
-            }
+            // 顶部不再放「返回上一层」快捷键：列表第一行本身就是「…」文件夹项（见 UpRow）
             // 目录名：点它 = 搜索文件夹（在本窗口所在目录里按名字找目录，一键下钻）
             Text(
                 text = pane.title,
@@ -510,8 +551,9 @@ private fun PaneBox(
                     .clickable { onSearchFolder() }
                     .padding(horizontal = 2.dp, vertical = 4.dp)
             )
+            // 目录计数上移到顶栏；下面那条独立状态栏已删除
             Text(
-                text = pane.path,
+                text = counts,
                 fontSize = 10.sp,
                 color = MaterialTheme.colorScheme.outline,
                 maxLines = 1,
@@ -520,6 +562,15 @@ private fun PaneBox(
                     .weight(1f)
                     .padding(start = 6.dp)
             )
+            if (pane.selected.isNotEmpty()) {
+                Text(
+                    text = "已选 " + pane.selected.size,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(end = 4.dp)
+                )
+            }
             Text(
                 text = tag,
                 fontSize = 10.sp,
@@ -555,21 +606,41 @@ private fun PaneBox(
 
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
 
-        pane.error?.let {
-            Text(
-                text = it,
-                color = MaterialTheme.colorScheme.error,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-            )
+        pane.error?.let { msg ->
+            Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp)) {
+                Text(text = msg, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { onSafBrowse(pane.path) }) {
+                        Text("免提权浏览", fontSize = 11.sp)
+                    }
+                    TextButton(onClick = {
+                        runCatching {
+                            com.zhiwei.filemanager.core.util.Permissions.openAllFilesSettings(context)
+                        }
+                    }) {
+                        Text("授予全部文件访问", fontSize = 11.sp)
+                    }
+                }
+            }
         }
 
-        val list = pane.visibleItems()
         LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().weight(1f, fill = false)) {
+            // 首行「返回上一层」：图标与普通文件夹同款，内容换成三个点
+            if (pane.keyword.isBlank()) {
+                val parent = FileRepo.parentOf(pane.path)
+                if (parent != null) {
+                    item(key = "__up__") {
+                        UpRow(parent = parent) {
+                            state.setActive(index)
+                            pane.up()
+                        }
+                    }
+                }
+            }
             if (list.isEmpty() && !loading) {
                 item { EmptyHint(pane.path, pane.keyword) }
             }
-            items(list, key = { it.path }) { item ->
+            itemsIndexed(list, key = { _, it -> it.path }) { rowIndex, item ->
                 FileRow(
                     item = item,
                     selected = pane.isSelected(item),
@@ -578,9 +649,13 @@ private fun PaneBox(
                     onClick = {
                         state.setActive(index)
                         if (pane.selected.isNotEmpty()) {
+                            // 多选态下点一下 = 只取消/恢复这一项
                             pane.toggle(item)
                         } else if (item.isDir) {
                             pane.open(item.path)
+                        } else if (item.isApk) {
+                            // 安装包不走整页预览：点开就是速览弹窗（安装 / 查看 / 更多）
+                            state.apkQuickRequest = item
                         } else {
                             openFile(context, item, nav)
                         }
@@ -589,11 +664,27 @@ private fun PaneBox(
                         state.setActive(index)
                         onLongPress(item)
                     },
-                    onText = { pane.open(item.path) }
+                    onText = { pane.open(item.path) },
+                    // 左右滑动进入多选：滑一行选中单项，再滑另一行则把两行之间整段一起选上
+                    modifier = Modifier.pointerInput(item.path) {
+                        val threshold = 30.dp.toPx()
+                        var total = 0f
+                        detectHorizontalDragGestures(
+                            onDragStart = { total = 0f },
+                            onDragCancel = { total = 0f },
+                            onDragEnd = {
+                                if (kotlin.math.abs(total) >= threshold) {
+                                    state.setActive(index)
+                                    swipeSelect(rowIndex)
+                                }
+                                total = 0f
+                            },
+                            onHorizontalDrag = { _, dragAmount -> total += dragAmount }
+                        )
+                    }
                 )
             }
         }
-        PaneStatusBar(pane = pane, list = list)
     }
 }
 
@@ -671,30 +762,40 @@ private fun EmptyHint(path: String, keyword: String) {
     }
 }
 
-/** 状态条：项目数 / 已选 / 合计体积，避免用户还要点进属性里看。 */
+/**
+ * 列表首行「返回上一层」。
+ *
+ * 长得和普通文件夹项完全一致（同一个 36dp 圆角色块 + 两行文字），
+ * 只是色块里放的是「…」——用户一眼就知道「这是回到上面那一层」，
+ * 不需要再去顶部找一个小图标按钮。
+ */
 @Composable
-private fun PaneStatusBar(pane: PaneState, list: List<FileItem>) {
-    val totalSize = remember(list) { list.sumOf { it.size } }
-    val dirCount = remember(list) { list.count { it.isDir } }
+private fun UpRow(parent: String, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-            .padding(horizontal = 10.dp, vertical = 3.dp),
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            buildString {
-                append("共 ").append(list.size).append(" 项")
-                if (dirCount > 0) append("（").append(dirCount).append(" 个文件夹）")
-                append(" · 合计 ").append(Format.size(totalSize))
-                if (pane.selected.isNotEmpty()) append(" · 已选 ").append(pane.selected.size)
-            },
-            fontSize = 10.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Box(
+            Modifier
+                .size(36.dp)
+                .background(KindFolder.copy(alpha = 0.18f), RoundedCornerShape(8.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("…", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = KindFolder)
+        }
+        Column(Modifier.weight(1f).padding(start = 10.dp)) {
+            Text("返回上一层", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Text(
+                parent,
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
@@ -707,12 +808,19 @@ private fun FileRow(
     onToggle: () -> Unit,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
-    onText: () -> Unit
+    onText: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
+    // 选中态用动画过渡，别硬切：底色渐变 + 勾选框缩放
+    val rowColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else Color.Transparent,
+        label = "rowColor"
+    )
+    val checkScale by animateFloatAsState(targetValue = if (selected) 1f else 0.85f, label = "checkScale")
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
-            .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent)
+            .background(rowColor)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -729,7 +837,11 @@ private fun FileRow(
             )
         }
         if (selecting) {
-            Checkbox(checked = selected, onCheckedChange = { onToggle() })
+            Checkbox(
+                checked = selected,
+                onCheckedChange = { onToggle() },
+                modifier = Modifier.scale(checkScale)
+            )
         } else if (item.isDir) {
             Text(
                 text = ">",
@@ -878,121 +990,31 @@ private fun ItemMenuDialog(
     scope: kotlinx.coroutines.CoroutineScope
 ) {
     val context = LocalContext.current
-    val pane = state.active
+    var showMore by remember(item.path) { mutableStateOf(false) }
+
+    // 动作按类型产出（安装包先给安装包的工具、压缩包先给压缩包的工具），这里只管排布：
+    // 双列、最多 6 个动作 + 1 个「更多工具…」 = 7 个按钮，不霸占整屏。
+    val actions = itemActions(context, item, state, state.active, nav, onDialog, onClose, onAction, scope)
+    val head = actions.take(6)
+    val tail = actions.drop(6)
+
+    if (showMore) {
+        MoreActionsDialog(actions = tail, onClose = onClose)
+        return
+    }
+
     AlertDialog(
         onDismissRequest = onClose,
-        title = { Text(item.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        text = {
-            LazyColumn(Modifier.fillMaxWidth()) {
-                item {
-                    MenuRow("打开") {
-                        if (item.isDir) pane.open(item.path) else openFile(context, item, nav)
-                        onClose()
-                    }
-                }
-                if (!item.isDir && isPreviewable(item.name)) {
-                    item { MenuRow("预览") { onClose(); nav.openPreview(item.path) } }
-                }
-                item { MenuRow("十六进制查看") { onClose(); nav.openHex(item.path) } }
-                if (item.isDex || item.isApk || item.isJar) {
-                    item { MenuRow("Dex / Apk 工具") { onClose(); nav.openDex(item.path) } }
-                }
-                if (item.isApk) {
-                    item { MenuRow("APK 反编译工具箱") { onClose(); nav.openApkTool(item.path) } }
-                }
-                if (Format.isTextLikely(item.name) && !item.isDir) {
-                    item { MenuRow("文本编辑") { onClose(); nav.openText(item.path) } }
-                }
-                item {
-                    MenuRow("复制") {
-                        state.setClipboard(listOf(item.path), false)
-                        onClose()
-                        onAction("已复制：${item.name}")
-                    }
-                }
-                item {
-                    MenuRow("剪切") {
-                        state.setClipboard(listOf(item.path), true)
-                        onClose()
-                        onAction("已剪切：${item.name}")
-                    }
-                }
-                item {
-                    MenuRow("重命名") {
-                        onDialog(
-                            FileDialog.Input("重命名", item.name, "确定") { newName ->
-                                scope.launch {
-                                    withContext(Dispatchers.IO) { FileOps.rename(item.path, newName) }
-                                    state.panes.forEach { it.refresh() }
-                                }
-                            }
-                        )
-                    }
-                }
-                item {
-                    MenuRow("删除") {
-                        val toRecycle = AppPrefs.recycleEnabled
-                        onDialog(
-                            FileDialog.Confirm(
-                                "删除",
-                                if (toRecycle) "将「${item.name}」移入回收站？" else "永久删除「${item.name}」？不可恢复。"
-                            ) {
-                                deleteSelection(state, pane, listOf(item.path), scope, nav)
-                            }
-                        )
-                    }
-                }
-                item {
-                    MenuRow("压缩为 ZIP") {
-                        val out = FileOps.uniqueTarget(File(item.path).parentFile?.absolutePath ?: "/sdcard", item.name + ".zip")
-                        onClose()
-                        onAction("压缩中：${out.name}")
-                        com.zhiwei.filemanager.core.task.AppScope.io.launch {
-                            ArchiveTool.compressToZip(listOf(item.path), out.absolutePath)
-                            state.panes.forEach { it.refresh() }
-                        }
-                    }
-                }
-                if (!item.isDir && ArchiveTool.canExtract(item.name)) {
-                    item {
-                        MenuRow("解压到当前目录") {
-                            val dest = File(item.path).parentFile?.absolutePath ?: "/sdcard"
-                            onClose()
-                            onAction("解压中：${item.name}")
-                            com.zhiwei.filemanager.core.task.AppScope.io.launch {
-                                ArchiveTool.extract(item.path, dest)
-                                state.panes.forEach { it.refresh() }
-                            }
-                        }
-                    }
-                }
-                if (state.panes.size > 1 && !item.isDir) {
-                    item {
-                        MenuRow("复制到另一窗口") {
-                            val other = state.other
-                            onClose()
-                            if (other != null) {
-                                scope.launch {
-                                    withContext(Dispatchers.IO) { FileOps.copy(listOf(item.path), other.path) }
-                                    state.panes.forEach { it.refresh() }
-                                    onAction("已复制到 ${other.title}")
-                                }
-                            }
-                        }
-                    }
-                }
-                item { MenuRow("分享") { onClose(); shareFile(context, item, nav) } }
-                item { MenuRow("属性") { onDialog(FileDialog.Props(item)) } }
-                item {
-                    MenuRow("复制路径") {
-                        state.setClipboard(listOf(item.path), false)
-                        onClose()
-                        onAction(item.path)
-                    }
-                }
-            }
+        title = {
+            Text(item.name, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         },
-        confirmButton = { TextButton(onClick = onClose) { Text("关闭") } }
+        text = {
+            ActionGrid(
+                actions = head,
+                onMore = if (tail.isEmpty()) null else { { showMore = true } }
+            )
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text("关闭", fontSize = 12.sp) } }
     )
 }
 
@@ -1037,7 +1059,7 @@ private fun pasteInto(state: FileBrowserState, pane: PaneState, scope: Coroutine
 }
 
 /** 删除：按偏好移入回收站，否则直接销毁。 */
-private fun deleteSelection(
+internal fun deleteSelection(
     state: FileBrowserState,
     pane: PaneState,
     paths: List<String>,
@@ -1068,7 +1090,7 @@ private fun openFile(context: android.content.Context, item: FileItem, nav: File
 }
 
 /** 内置预览器覆盖的类型：其余交给系统「外部打开」。 */
-private fun isPreviewable(name: String): Boolean {
+internal fun isPreviewable(name: String): Boolean {
     val ext = Format.extOf(name)
     if (ext == "html" || ext == "htm" || ext == "mhtml") return true
     return when (Format.kindOf(name, false)) {
@@ -1096,7 +1118,7 @@ private fun openExternal(context: android.content.Context, item: FileItem, nav: 
     }
 }
 
-private fun shareFile(context: android.content.Context, item: FileItem, nav: FileNav) {
+internal fun shareFile(context: android.content.Context, item: FileItem, nav: FileNav) {
     try {
         val uri = FileProvider.getUriForFile(context, context.packageName + ".fileprovider", File(item.path))
         val intent = Intent(Intent.ACTION_SEND)

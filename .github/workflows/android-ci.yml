@@ -107,6 +107,9 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
+      # 必须 checkout：更新报告正文取自仓库根的 RELEASE_NOTES.md（body_path 是工作区相对路径）
+      - name: Checkout
+        uses: actions/checkout@v4
       - name: Download APK artifacts
         uses: actions/download-artifact@v4
         with:

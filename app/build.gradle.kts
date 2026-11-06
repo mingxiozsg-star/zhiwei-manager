@@ -11,16 +11,17 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-// 签名策略：**确定性优先**。
-// 旧实现的坑：无 Secrets 时在 CI 里用 keytool 现生成 keystore，
-// 于是每一轮构建的签名都不同，用户覆盖安装必然失败（“应用未安装”），只能卸载重装、丢数据。
-// 现在统一回落到 AGP 内置的 Android 标准 debug keystore —— 它跨机器、跨构建完全一致，
-// 因此「同包名 + 同签名」永远成立，升级可以直接覆盖安装。
-// 若日后要上架，再通过 keystore.properties 注入正式 keystore（届时签名会变，需要一次性迁移）。
+// 签名策略：**必须固定**，否则升级必然失败。
+// 踩过的坑（2026-11-06 实测坐实）：「AGP 内置的 Android 标准 debug keystore 跨构建一致」是错的。
+// CI 每次都是全新 runner，~/.android/debug.keystore 不存在 → AGP 现场用 keytool 随机生成一对密钥，
+// 于是 v1.3.0 与 v1.4.0 的签名证书完全不同（SHA-256 分别 453f59af… / 575915a7…），
+// 覆盖安装报「应用未安装 / 软件包与现有软件包存在冲突」。
+// 现在 release 一律要求 keystore.properties（本地 / CI 的 Secrets 都会生成它），签名恒定。
 val keystoreProps = Properties().apply {
     val f = rootProject.file("keystore.properties")
     if (f.exists()) FileInputStream(f).use { load(it) }
 }
+val hasFixedKeystore = !keystoreProps.getProperty("storeFile").isNullOrBlank()
 android {
     namespace = "com.zhiwei.filemanager"
     compileSdk = 35
@@ -28,20 +29,25 @@ android {
         applicationId = "com.zhiwei.filemanager"
         minSdk = 24
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.4.0"
+        versionCode = 6
+        versionName = "1.4.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
         }
     }
     signingConfigs {
-        if (!keystoreProps.getProperty("storeFile").isNullOrBlank()) {
+        if (hasFixedKeystore) {
             create("release") {
                 storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
                 storePassword = keystoreProps.getProperty("storePassword")
                 keyAlias = keystoreProps.getProperty("keyAlias")
                 keyPassword = keystoreProps.getProperty("keyPassword")
+                // 三档签名全开：v1(JAR) + v2 + v3。v1 让部分第三方安装器/老 ROM 的
+                // 「签名校验」也能正常识别，v3 供 Android 9+ 直接读取。
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
             }
         }
     }
@@ -53,9 +59,17 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // 默认走 debug 签名：稳定、可覆盖安装。有 keystore.properties 时才用正式签名。
-            signingConfig = signingConfigs.findByName("release")
-                ?: signingConfigs.getByName("debug")
+            // 固定签名优先。缺 keystore.properties 时本地退回 debug 签名以便调试；
+            // 但 CI 上由 workflow 直接 fail，不会静默产出「签名不固定」的正式包。
+            if (hasFixedKeystore) {
+                signingConfig = signingConfigs.getByName("release")
+            } else {
+                logger.warn(
+                    "⚠ 未找到 keystore.properties：本次 release 使用 debug 签名，" +
+                        "签名不固定，禁止分发。CI 会拒绝这种情况。"
+                )
+                signingConfig = signingConfigs.getByName("debug")
+            }
         }
     }
     compileOptions {

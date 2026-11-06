@@ -1,7 +1,7 @@
 # 知微管理器（ZhiweiManager）
 
 Android 文件管理器，交互模型参照 MT 管理器（双窗口、无剪贴板中转、直接跨窗口操作），
-内置面向逆向工程与日常维护的工具链。包名 `com.zhiwei.filemanager`，版本 `1.4.0`（versionCode 5）。
+内置面向逆向工程与日常维护的工具链。包名 `com.zhiwei.filemanager`，版本 `1.4.1`（versionCode 6）。
 
 > 构建策略：**不在本地出正式包**。正式包统一由 GitHub Actions 构建（`.github/workflows/android-ci.yml`）。
 > 版本变更记录见 [CHANGELOG.md](CHANGELOG.md)。
@@ -77,6 +77,9 @@ Android 文件管理器，交互模型参照 MT 管理器（双窗口、无剪�
 - 分享目标：`ACTION_SEND` / `ACTION_VIEW`（APK、zip、txt）可直接送入本应用
 
 ## 二、待办路线（按优先级）
+
+**已完成（1.4.1 收口）**
+- ~~正式包每次构建签名都不同 → 覆盖安装报「应用未安装 / 软件包冲突」~~ → 固定 keystore（GitHub Secrets 注入，不进公开仓库）+ release 三档签名全开 + CI 签名指纹硬校验；缺少 Secrets 时 tag 构建直接失败
 
 **已完成（1.4.0 收口）**
 - ~~受限目录必须靠 Shizuku / ROOT 才能看~~ → 已落地免提权 SAF 授权浏览（`SafTree` + `SafBrowseSheet`）

@@ -24,6 +24,8 @@ shizuku = "13.1.5"
 diffUtils = "4.12"
 desugar = "2.1.4"
 smali = "3.0.10"
+# APK 签名 / 校验（v1+v2+v3），与 AGP 同源，纯 JVM 无需 JNI
+apksig = "8.7.3"
 
 [libraries]
 # 显式兜底：AGP 内建 Kotlin 不保证自动注入 stdlib，缺失会导致 Kotlin 源码无法编译
@@ -60,6 +62,7 @@ smali = { group = "com.android.tools.smali", name = "smali", version.ref = "smal
 baksmali = { group = "com.android.tools.smali", name = "smali-baksmali", version.ref = "smali" }
 smali-dexlib2 = { group = "com.android.tools.smali", name = "smali-dexlib2", version.ref = "smali" }
 desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugar" }
+apksig = { group = "com.android.tools.build", name = "apksig", version.ref = "apksig" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

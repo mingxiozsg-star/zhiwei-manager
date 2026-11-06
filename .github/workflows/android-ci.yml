@@ -44,6 +44,12 @@ jobs:
           ./gradlew --version
 
 
+      # 签名策略（严禁引入随机性）：
+      #   1) 若仓库提供了 Secrets，用 Secrets 里的 keystore；
+      #   2) 否则一律沿用 AGP 内置的 Android 标准 debug keystore —— 它是**跨机器确定性**的，
+      #      因此每一轮 CI 打出的包签名完全一致，升级时可以直接覆盖安装，不需要卸载重装。
+      # 历史坑：早期版本在无 Secrets 时用 keytool 现生成临时 keystore，
+      # 导致每次构建签名都不同 → 覆盖安装报“应用未安装”。
       - name: Prepare signing material
         env:
           KS_B64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -57,14 +63,9 @@ jobs:
             KEY_ALIAS="${KEY_ALIAS:-zhiwei}"
             KEY_PASS="${KEY_PASS:-$KS_PASS}"
             printf 'storeFile=release.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' "${KS_PASS}" "${KEY_ALIAS}" "${KEY_PASS}" > keystore.properties
-            echo "签名：使用仓库 Secrets 提供的 keystore"
+            echo "签名：使用仓库 Secrets 提供的固定 keystore"
           else
-            keytool -genkeypair -v -keystore release.jks -storetype JKS \
-              -alias zhiwei -keyalg RSA -keysize 2048 -validity 10000 \
-              -storepass zhiwei123 -keypass zhiwei123 \
-              -dname "CN=Zhiwei Manager, OU=Dev, O=Zhiwei, L=CN, ST=CN, C=CN" > /dev/null 2>&1
-            printf 'storeFile=release.jks\nstorePassword=zhiwei123\nkeyAlias=zhiwei\nkeyPassword=zhiwei123\n' > keystore.properties
-            echo "签名：未提供 Secrets，使用 CI 内生成的临时 keystore（仅用于构建验证）"
+            echo "签名：使用 AGP 内置 Android 标准 debug keystore（确定性，跨构建一致）"
           fi
 
       - name: Build debug APK

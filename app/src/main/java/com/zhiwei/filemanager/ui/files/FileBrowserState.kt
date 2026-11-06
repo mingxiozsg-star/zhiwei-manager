@@ -85,8 +85,14 @@ class FileBrowserState {
     var clipboardCut by mutableStateOf(false)
         private set
 
-    /** 顶栏放大镜 / 点击顶部目录标题时置位，由文件页消费后清空。 */
-    var searchRequest by mutableStateOf(false)
+    /** 顶栏放大镜：搜索「文件」（名称 / 内容匹配）。由文件页消费后清空。 */
+    var searchFileRequest by mutableStateOf(false)
+
+    /** 点击顶栏目录标题：搜索「文件夹」（按名字找目录并直接跳转）。由文件页消费后清空。 */
+    var searchFolderRequest by mutableStateOf(false)
+
+    /** 折叠栏里的「书签与最近访问」：置位后由文件页打开书签面板，消费完清空。 */
+    var bookmarkRequest by mutableStateOf(false)
 
     val active: PaneState
         get() = panes[activeIndex.coerceIn(0, panes.size - 1)]

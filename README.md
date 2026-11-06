@@ -1,22 +1,24 @@
 # 知微管理器（ZhiweiManager）
 
 Android 文件管理器，交互模型参照 MT 管理器（双窗口、无剪贴板中转、直接跨窗口操作），
-内置面向逆向工程与日常维护的工具链。包名 `com.zhiwei.filemanager`，版本 `1.2.0`。
+内置面向逆向工程与日常维护的工具链。包名 `com.zhiwei.filemanager`，版本 `1.3.0`（versionCode 4）。
 
 > 构建策略：**不在本地出正式包**。正式包统一由 GitHub Actions 构建（`.github/workflows/android-ci.yml`）。
+> 版本变更记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 一、当前已落地能力（真实进度）
 
 ### 文件管理
 - **双窗口默认左右两栏**（`左 | 右` 并列，与 MT / NP 管理器一致），分隔线可拖动改比例；`⋮` 菜单可切「左右 / 上下」与单/双窗
-- **顶栏只显示当前目录**：大字目录名 + 小字完整路径；点标题或右上角放大镜即进入搜索。原顶部那排「单窗 / 左右⇋ / +窗口 / ★收藏 / 🔍搜索」杂乱按钮已全部移除
+- **顶栏只显示当前目录**：大字目录名 + 小字完整路径；右上角放大镜 → 搜**文件**，点目录名 → 搜**文件夹**。原顶部那排「单窗 / 左右⇋ / +窗口 / ★收藏 / 🔍搜索」杂乱按钮已全部移除
+- **左侧折叠栏（抽屉）**：窗格顶部与底部的快捷入口芯片全部删除，跳转能力归口到抽屉 —— 存储卷（含容量）、常用目录、应用联动、书签/回收站/终端。按需展开，不再常驻吃掉两遍首屏高度
 - **栏内下滑切窗**：在左栏内向下滑 → 操作焦点切到左栏；右栏内向下滑 → 切到右栏（栏内任意位置点击同样切焦点，激活栏带高亮描边）
 - **双层底栏**：上层是 NP 风格等分图标栏（上级 / 新建 / 搜索 / 收藏 / 回收站，选中态自动换成 复制 / 剪切 / 重命名 / 压缩 / 删除），下层保留原文字操作栏（粘贴 / 全选 / 反选 / 取消选择 / 合并文本 / 对比双窗）
 - 每栏独立标题条（左/右标识 + 当前目录名 + 上级 / 刷新）与独立状态条
 - 复制 / 移动 / 删除 / 重命名 / 新建文件与文件夹 / 属性查看
 - 多选（水平滑动手势进入多选）、全选 / 反选 / 取消选择与批量操作、跨窗口「复制/移动到另一窗口」
 - 回收站：删除默认移入 `/sdcard/.zhiwei_recycle`，可单条还原（原位置占用自动加序号）、单条彻底删除、一键清空；开关可关掉改回直接销毁
-- 打开方式 / 分享 / 复制路径 / 十六进制查看 / 文本编辑 / 压缩 / 解压（长按菜单）
+- 打开方式 / 预览 / 分享 / 复制路径 / 十六进制查看 / 文本编辑 / 压缩 / 解压（长按菜单）
 - 排序（名称 / 大小 / 日期 / 类型 + 升降序）、隐藏文件开关、当前目录过滤
 - 文件类型色标（APK / DEX / 归档 / 图片 / 视频 / 音频 / 文本 / 代码 / PDF / 字体 / 数据库）
 - Shizuku（shell 身份）读取 `/Android/data` 等受保护目录；ROOT 通道可选
@@ -43,11 +45,27 @@ Android 文件管理器，交互模型参照 MT 管理器（双窗口、无剪�
 - 字符串工具箱：Base64 / Hex / Unicode / URL / 哈希 / DES / JSON / 时间戳
 - Hex 查看器（分页 + 二进制搜索）、文本 Diff（java-diff-utils）、文本/XML/JSON 编辑器
 - 工具箱按「文本与编码 / 查看与对比 / 逆向工程」分组，能力清单与真实状态同页可见
+### 预览 / 脚本 / APK 工具箱
+- **内置文件预览器**（点文件或长按菜单 →「预览」，按类型自动分流）：
+  - 图片：降采样解码（长边 ≤ 2400）防 OOM + EXIF 方向自动纠正
+  - 视频：`VideoView` 播放；音频：`MediaPlayer` + 进度条 / 播放暂停
+  - 字体：`Typeface` 样张（中英文 / 数字 / 标点实时渲染）
+  - 文本 / 代码 / 配置：≤ 2MB 截断读取后直接展示，超限明确提示
+  - 网页：`WebView`（`allowFileAccess` 打开本地 html / mhtml）
+  - APK：走 `ApkInspector` 展示包名 / 版本 / 权限 / 组件 / 签名
+  - 归档：`ZipFile` 列出条目（≤ 500 条封顶，防炸弹）
+  - 其余二进制：512 字节 Hex 兜底预览
+- **SH 脚本执行器**：双通道（`sh` / `su`）+ 15 / 60 / 180 / 600 秒四档超时 + 7 组常用预设脚本；脚本先落临时文件再以 `sh 文件` 执行，避免多行命令转义地狱，输出带 exit code 回显
+- **APK 反编译工具箱**：解析 APK 结构、一键解包（提 dex / 列 so 清单）、签名 v1 / v2 / v3 校验、加固特征判定（22 条特征库）、与内置 smali 引擎打通做 `dex <-> smali` 互转
 
 ### 系统
+
 - 内置终端：普通（`sh -c`）/ ROOT（`su -c`）/ Shizuku（uid 2000）三通道，会话内保留输出
 - 后台任务看板：所有耗时操作统一上报进度与结果
 - 提权控制台：所有文件访问权限、Shizuku 授权、ROOT 检测
+- **启动一次性申请权限**：进 App 即把所有运行时权限一次申请完（通知、存储、所有文件访问，按 API 分级），「所有文件访问」用 SP 标记只在首次自动引导，之后不再骚扰
+- **内置更新检查**：启动静默比对 GitHub Release（多镜像加速：`ghfast.top` → `gh-proxy.com` → 直连），**仅有新版才弹窗**（去官网更新 / 取消更新 / 立即更新 → 跳项目主页）；「设置 → 关于我们 → 检查更新」可手动触发
+- **应用联动**：检测到已安装知微浏览器（`com.java.myapplication`）时，折叠栏出现「知微浏览器」入口，一键跳其专属下载目录 `/sdcard/Download/知微浏览器`
 - 权限清单：`MANAGE_EXTERNAL_STORAGE`、`READ/WRITE_EXTERNAL_STORAGE`、`INTERNET`、
   `POST_NOTIFICATIONS`、`QUERY_ALL_PACKAGES`、`REQUEST_INSTALL_PACKAGES`、`FOREGROUND_SERVICE*`、
   `WAKE_LOCK`；FileProvider 已配置（`${applicationId}.fileprovider` → `res/xml/provider_paths.xml`）
@@ -55,30 +73,33 @@ Android 文件管理器，交互模型参照 MT 管理器（双窗口、无剪�
 
 ## 二、待办路线（按优先级）
 
+**已完成（1.3.0 收口，原 P0-1 / P0-2）**
+- ~~书签 / 最近访问 / 当前目录递归搜索~~ → 已落地（`BookmarkStore` + 递归搜索面板）
+- ~~文件与文件夹对比、文本批量合并~~ → 已落地（目录求差集、字节流对比、流式合并）
+- 左侧折叠栏、内置预览器、SH 脚本执行器、APK 反编译工具箱、启动一次性权限、内置更新检查 → 全部落地
+
 **P0 — 基础补完**
-1. 书签 / 最近访问 / 当前目录递归搜索
-2. 文件与文件夹对比、文本批量合并
-3. Jar/AAR 写回与重新打包（含 `classes.dex` 注入）
+1. Jar / AAR 写回与重新打包（含 `classes.dex` 注入）—— 解包已可用，写回未做
+2. apktool 全流程接入（反编译 / 回编译 / 资源替换），并入 APK 反编译工具箱
+3. APK 签名（v1/v2/v3、自定义 keystore）、共存（applicationId / 包名改写）、安装引导
+   —— 签名**校验**已可用，**签名与共存**未做
 
 **P1 — 逆向主力**
-4. APK 签名（v1/v2/v3、自定义 keystore）、共存（applicationId / 包名改写）、安装引导
-5. Res 资源混淆（`resources.arsc` 字符串池重写）、Apk 加固判定
-6. apktool 全流程接入（反编译 / 回编译 / 资源替换），与内置 smali 引擎共用
-7. SO 查看/编辑/对比（字符串常量扫描、节区视图、Hex 级差异）
-8. 十六进制对比（文件级差异 + 字节级跳转）
-9. 高兼容性省略库（.so 依赖裁剪）编辑
+4. Res 资源混淆（`resources.arsc` 字符串池重写）
+5. SO 查看 / 编辑 / 对比（字符串常量扫描、节区视图、Hex 级差异）
+6. 十六进制对比（文件级差异 + 字节级跳转）
+7. 高兼容性省略库（.so 依赖裁剪）编辑
 
 **P2 — 保护与增强**
-10. Dex / Jar 混淆、字符串加密
-11. 控制流混淆 8.0、VM 保护
-12. 布局查看器（运行时 View 层级 / Layout Inspector 简版）
+8. Dex / Jar 混淆、字符串加密
+9. 控制流混淆 8.0、VM 保护
+10. 布局查看器（运行时 View 层级 / Layout Inspector 简版）
 
 **P3 — 媒体与网络**
-13. PDF 合并 / 加密 / 分割 / 提取 / 解除加密限制 / 删页（pdfbox-android）
-14. FFmpeg：转码、剪切、提取视频流/音频流、自定义命令（ffmpeg-kit 或自编译 so）
-15. Markdown / HTML 预览器
-16. 网络存储：FTP / SFTP / SMB / WebDAV
-17. HTTP 服务、APK MCP 服务（由 App 进程对外提供接口）
+11. PDF 合并 / 加密 / 分割 / 提取 / 解除加密限制 / 删页（pdfbox-android）
+12. FFmpeg：转码、剪切、提取视频流 / 音频流、自定义命令（ffmpeg-kit 或自编译 so）
+13. 网络存储：FTP / SFTP / SMB / WebDAV
+14. HTTP 服务、APK MCP 服务（由 App 进程对外提供接口）
 
 > 全量清单与逐项状态见应用内「设置 → 功能清单」，数据源为 `tool/ToolRegistry.kt`
 > （`READY` / `PARTIAL` / `PLANNED` 三态，不做包装）。
@@ -87,14 +108,16 @@ Android 文件管理器，交互模型参照 MT 管理器（双窗口、无剪�
 
 ```
 app/src/main/java/com/zhiwei/filemanager/
-├── MainActivity.kt              入口（主题模式、通知权限）
+├── MainActivity.kt              入口（主题模式、启动一次性权限申请）
 ├── core/
-│   ├── fs/       FileRepo（列举/排序/路径）、FileOps（增删改查/复制/移动）
+│   ├── fs/       FileRepo（列举/排序/路径）、FileOps（增删改查/复制/移动）、StorageVolumes（存储卷枚举）
 │   ├── model/    FileItem、SortMode/SortOrder
 │   ├── prefs/    AppPrefs（Compose State 包装的 SharedPreferences）
 │   ├── shell/    ShellRunner（sh/su）、ShizukuHelper（Shizuku 通道）
 │   ├── task/     TaskCenter（任务看板）、AppScope
-│   └── util/     Format（尺寸/时间/类型判定）、AppInfo
+│   ├── update/   UpdateChecker（Release 检查 + 镜像加速 + 断点续传）
+│   └── util/     Format（尺寸/时间/类型判定）、AppInfo、ApkInspector（APK 解析/签名/加固）、
+│                 CompanionApps（联动应用探测）、Permissions（权限门面）
 ├── tool/
 │   ├── ToolRegistry.kt           全量功能清单与真实进度
 │   ├── archive/ArchiveTool.kt    zip/tar/gz/xz/lz4/zstd/rar
@@ -103,12 +126,14 @@ app/src/main/java/com/zhiwei/filemanager/
 │   ├── hex/      HexTool（分页浏览 + 搜索）
 │   └── text/     EncodingTool（GBK/UTF-8 嗅探与批量转码）、StringCodec
 └── ui/
-    ├── AppRoot.kt               底部四页 + 二级路由（工具页 / 终端）
-    ├── files/     FileBrowserScreen（多窗格/列表/批量/菜单/属性）、FileBrowserState
-    ├── settings/  SettingsScreen（外观/浏览/提权/功能清单/关于）
+    ├── AppRoot.kt               底部四页 + 二级路由（工具页 / 预览 / 终端）
+    ├── AppDrawer.kt             左侧折叠栏（存储卷 / 常用目录 / 应用联动 / 工具集合）
+    ├── files/     FileBrowserScreen（多窗格/列表/批量/菜单/属性）、FileBrowserState、BookmarkSearchSheets
+    ├── preview/   PreviewScreen（九类文件预览）
+    ├── settings/  SettingsScreen（外观/浏览/提权/功能清单/关于与更新）、UpdateNotice（新版弹窗）
     ├── tasks/     TaskBoardScreen
     ├── terminal/  TerminalScreen（三通道 shell）
-    ├── tools/     ToolboxScreen 与各工具页
+    ├── tools/     ToolboxScreen 与各工具页（含 ScriptScreen、ApkToolScreen）
     └── theme/     ZhiweiTheme（靛蓝 × 青）
 ```
 

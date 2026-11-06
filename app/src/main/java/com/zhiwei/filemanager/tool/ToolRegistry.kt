@@ -25,6 +25,12 @@ object ToolRegistry {
             Feature("回收站（删除可还原、可清空）", FeatureStatus.READY, "/sdcard/.zhiwei_recycle"),
             Feature("搜索（当前目录 / 递归 / 内容匹配）", FeatureStatus.READY),
             Feature("书签 / 最近访问", FeatureStatus.READY),
+            Feature(
+                "内置文件预览（图片/视频/音频/字体/APK/归档/网页/文本）",
+                FeatureStatus.READY,
+                "大图降采样 + EXIF 校正，未知类型回落 Hex"
+            ),
+            Feature("左侧折叠栏（存储卷 / 常用目录 / 应用联动）", FeatureStatus.READY),
             Feature("ROOT 授权访问文件系统", FeatureStatus.PARTIAL, "su 通道已接"),
             Feature("Shizuku 访问 Android/data", FeatureStatus.READY),
             Feature("文件/文件夹对比（文本 diff / 字节 / 目录）", FeatureStatus.READY),
@@ -51,12 +57,15 @@ object ToolRegistry {
             Feature("Dex2C", FeatureStatus.PLANNED)
         ),
         "Apk 解析与签验" to listOf(
+            Feature("Apk 解析（包名 / 版本 / SDK / 权限 / Activity）", FeatureStatus.READY, "PackageManager + 归档扫描"),
+            Feature("Apk 签名检测 v1(JAR) / v2 / v3", FeatureStatus.READY, "手写 APK Signing Block 解析"),
+            Feature("Apk 加固判断", FeatureStatus.READY, "22 条厂商特征命中表"),
+            Feature("Apk 一键解包 / 提取 classes.dex / dex、so 清单", FeatureStatus.READY, "commons-compress 内核"),
             Feature("Apk 解包 / 重打包（apktool 内核）", FeatureStatus.PARTIAL, "aapt2 二进制已内置"),
             Feature("Apk 签名 / 一键随机签名", FeatureStatus.PLANNED),
             Feature("Apk 共存（包名分身）", FeatureStatus.PLANNED),
             Feature("Apk 对齐优化", FeatureStatus.PLANNED),
             Feature("Apk 伪加密 / 反伪加密", FeatureStatus.PLANNED),
-            Feature("Apk 加固判断", FeatureStatus.PLANNED),
             Feature("AndroidManifest / Apk 对比", FeatureStatus.PLANNED),
             Feature("Shizuku 安装 apk / apks", FeatureStatus.PLANNED)
         ),
@@ -82,7 +91,7 @@ object ToolRegistry {
             Feature("JSON 美化 / 压缩 / 校验", FeatureStatus.READY),
             Feature("时间戳 <-> 日期", FeatureStatus.READY),
             Feature("字符串反转 / 统计（字节、行数）", FeatureStatus.READY),
-            Feature("GBK <-> UTF-8 文夹夹转码", FeatureStatus.READY),
+            Feature("GBK <-> UTF-8 文件夹转码", FeatureStatus.READY),
             Feature("Xml 文本代码格式化", FeatureStatus.PARTIAL),
             Feature("Svg <-> VectorDrawable 互转", FeatureStatus.PLANNED)
         ),
@@ -98,8 +107,8 @@ object ToolRegistry {
             Feature("Hex 查看器 + 二进制搜索", FeatureStatus.READY),
             Feature("Hex 编辑器（写回）", FeatureStatus.PLANNED),
             Feature("文本对比 / 十六进制对比", FeatureStatus.PARTIAL, "统一 diff 已实现"),
-            Feature("Markdown / Html 预览器", FeatureStatus.PLANNED),
-            Feature("字体预览器 / 音乐播放器", FeatureStatus.PLANNED),
+            Feature("Markdown / Html 预览器", FeatureStatus.READY, "WebView 渲染本地 html"),
+            Feature("字体预览器 / 音乐播放器", FeatureStatus.READY, "Typeface 样张 + MediaPlayer 进度条"),
             Feature("布局查看器 / Activity 记录", FeatureStatus.PLANNED),
             Feature("数据库编辑（SQLite）", FeatureStatus.PLANNED),
             Feature("SO 文件查看/编辑/对比（字符常量）", FeatureStatus.PARTIAL, "字符串扫描已备")
@@ -119,6 +128,9 @@ object ToolRegistry {
         ),
         "系统与工具" to listOf(
             Feature("Shizuku / ROOT 提权控制台", FeatureStatus.READY),
+            Feature("SH 脚本执行器（普通 / ROOT 双通道）", FeatureStatus.READY, "脚本落盘再执行，避免二次解析"),
+            Feature("启动一次性权限申请（含所有文件访问）", FeatureStatus.READY, "所有文件访问仅首次自动引导"),
+            Feature("内置更新检查与新版弹窗", FeatureStatus.READY, "GitHub Releases + 镜像加速"),
             Feature("后台任务进度看板", FeatureStatus.READY),
             Feature("屏幕取色器 / 屏幕标尺", FeatureStatus.PLANNED),
             Feature("分贝测试仪", FeatureStatus.PLANNED)

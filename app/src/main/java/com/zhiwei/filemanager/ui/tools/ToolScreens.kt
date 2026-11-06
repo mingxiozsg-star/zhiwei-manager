@@ -65,7 +65,9 @@ enum class ToolPage(val title: String, val desc: String, val glyph: String = "�
     MERGE("文本批量合并", "按名称/日期顺序合并目录内全部文本文件", "⊕"),
     BATCH_RENAME("批量重命名", "正则替换 / 序号 / 前后缀 / 大小写，一次改一批", "✎"),
     COMPARE("文件与目录对比", "双窗一键对比：文本 diff / 字节差异 / 目录差异", "⇄"),
-    EDITOR("文本编辑器", "编辑 / 另存 / XML、JSON 格式化", "✐")
+    EDITOR("文本编辑器", "编辑 / 另存 / XML、JSON 格式化", "✐"),
+    SCRIPT("SH 脚本执行", "普通 / ROOT 双通道，脚本落盘再执行，7 组预设", "\$"),
+    APK_TOOL("APK 反编译工具箱", "一键解包、只提 dex、dex/so 清单一键出", "⊞")
 }
 
 /** 工具箱分组目录：只放真实可用的页面。 */
@@ -73,7 +75,8 @@ object ToolCatalog {
     val groups: List<Pair<String, List<ToolPage>>> = listOf(
         "文本与编码" to listOf(ToolPage.STRING, ToolPage.ENCODING, ToolPage.MERGE, ToolPage.BATCH_RENAME),
         "查看与对比" to listOf(ToolPage.HEX, ToolPage.DIFF, ToolPage.COMPARE, ToolPage.EDITOR),
-        "逆向工程" to listOf(ToolPage.DEX)
+        "逆向工程" to listOf(ToolPage.DEX, ToolPage.APK_TOOL),
+        "脚本与执行" to listOf(ToolPage.SCRIPT)
     )
 }
 

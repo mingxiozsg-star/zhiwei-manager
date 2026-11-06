@@ -364,3 +364,125 @@ private fun PathRow(
         )
     }
 }
+/**
+ * 搜索「文件夹」：只列目录（不列文件），点一条即把窗口直接下钻过去。
+ *
+ * 与 [SearchSheet]（搜文件）的分工：这是「导航式搜索」——
+ * 搜文件的结果点击是「定位到它所在的目录」，而本面板的结果点击是「**进入**该目录」。
+ * 广度优先遍历，命中结果按离当前目录由近及远出现。
+ */
+@Composable
+fun FolderSearchSheet(
+    pane: PaneState,
+    onOpen: (String) -> Unit,
+    onClose: () -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var query by remember { mutableStateOf("") }
+    var recursive by remember { mutableStateOf(true) }
+    var running by remember { mutableStateOf(false) }
+    var scanned by remember { mutableStateOf(0) }
+    var dirs by remember { mutableStateOf(emptyList<Pair<String, Int>>()) }
+    var summary by remember { mutableStateOf("") }
+
+    fun start() {
+        val needle = query.trim().lowercase()
+        if (running || needle.isEmpty()) return
+        running = true
+        dirs = emptyList()
+        scanned = 0
+        summary = ""
+        val root = pane.path
+        val maxDepth = if (recursive) 12 else 1
+        scope.launch {
+            val found = withContext(Dispatchers.IO) {
+                val out = mutableListOf<Pair<String, Int>>()
+                var count = 0
+                val queue = ArrayDeque<Pair<File, Int>>()
+                queue.addLast(File(root) to 0)
+                while (queue.isNotEmpty() && out.size < 300) {
+                    val (dir, d) = queue.removeFirst()
+                    val children = try {
+                        dir.listFiles()
+                    } catch (t: Throwable) {
+                        null
+                    } ?: continue
+                    for (child in children) {
+                        count++
+                        if (!child.isDirectory) continue
+                        if (child.name.lowercase().contains(needle)) {
+                            val kids = try {
+                                child.listFiles()?.size ?: 0
+                            } catch (t: Throwable) {
+                                0
+                            }
+                            out += child.absolutePath to kids
+                        }
+                        if (d + 1 <= maxDepth) queue.addLast(child to (d + 1))
+                    }
+                }
+                (count to out)
+            }
+            scanned = found.first
+            dirs = found.second
+            summary = "扫描 ${found.first} 个条目 · 命中 ${found.second.size} 个文件夹"
+            running = false
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("搜索文件夹 · " + pane.title, fontSize = 16.sp) },
+        text = {
+            Column(Modifier.heightIn(max = 460.dp)) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    label = { Text("文件夹名关键词") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { recursive = !recursive }) {
+                        Text(if (recursive) "● 含子目录" else "○ 仅当前层", fontSize = 12.sp)
+                    }
+                    TextButton(onClick = { start() }) {
+                        Text(if (running) "搜索中…" else "开始搜索", fontSize = 12.sp)
+                    }
+                }
+                if (summary.isNotEmpty()) {
+                    Text(
+                        summary,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                } else if (running) {
+                    Text(
+                        "已扫描 $scanned",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                HorizontalDivider()
+                Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState())) {
+                    if (dirs.isEmpty() && !running) {
+                        EmptyHint("输入关键词后点「开始搜索」。结果点击即进入该目录。")
+                    }
+                    dirs.forEach { (path, kids) ->
+                        PathRow(
+                            title = File(path).name,
+                            subtitle = path + " · $kids 个子项",
+                            onClick = { onOpen(path) },
+                            trailing = "进入",
+                            onTrailing = { onOpen(path) }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onClose) { Text("关闭") } }
+    )
+}

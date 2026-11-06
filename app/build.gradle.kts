@@ -11,29 +11,30 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-// CI / 本地可通过 keystore.properties（不入库）注入正式签名；缺失时回落到 debug 签名
+// 签名策略：**确定性优先**。
+// 旧实现的坑：无 Secrets 时在 CI 里用 keytool 现生成 keystore，
+// 于是每一轮构建的签名都不同，用户覆盖安装必然失败（“应用未安装”），只能卸载重装、丢数据。
+// 现在统一回落到 AGP 内置的 Android 标准 debug keystore —— 它跨机器、跨构建完全一致，
+// 因此「同包名 + 同签名」永远成立，升级可以直接覆盖安装。
+// 若日后要上架，再通过 keystore.properties 注入正式 keystore（届时签名会变，需要一次性迁移）。
 val keystoreProps = Properties().apply {
     val f = rootProject.file("keystore.properties")
     if (f.exists()) FileInputStream(f).use { load(it) }
 }
-
 android {
     namespace = "com.zhiwei.filemanager"
     compileSdk = 35
-
     defaultConfig {
         applicationId = "com.zhiwei.filemanager"
         minSdk = 24
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.2.0"
-
+        versionCode = 4
+        versionName = "1.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
         }
     }
-
     signingConfigs {
         if (!keystoreProps.getProperty("storeFile").isNullOrBlank()) {
             create("release") {
@@ -44,7 +45,6 @@ android {
             }
         }
     }
-
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -53,19 +53,20 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // 默认走 debug 签名：稳定、可覆盖安装。有 keystore.properties 时才用正式签名。
             signingConfig = signingConfigs.findByName("release")
                 ?: signingConfigs.getByName("debug")
         }
     }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
         isCoreLibraryDesugaringEnabled = true
     }
-
     buildFeatures {
         compose = true
+        // 打开 BuildConfig，让 AppInfo 直接从构建产物读版本号，杜绝“关于页版本号写死不同步”。
+        buildConfig = true
     }
 
     packaging {
@@ -155,6 +156,8 @@ dependencies {
 
     // 对比
     implementation(libs.java.diff.utils)
+    // APK 签名 / 校验（v1+v2+v3）
+    implementation(libs.apksig)
 
     // Dex / Smali / Jar 核心工具链
     implementation(libs.smali)

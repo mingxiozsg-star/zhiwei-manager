@@ -48,7 +48,7 @@ import kotlinx.coroutines.withContext
  * 打开文件。Android/data、Android/obb 这类按路径读不到的地方，这条是唯一不靠高权限的路。
  */
 @Composable
-fun SafBrowseSheet(initialPath: String, nav: FileNav, onClose: () -> Unit) {
+internal fun SafBrowseSheet(initialPath: String, nav: FileNav, onClose: () -> Unit) {
     val context = LocalContext.current
     var tree by remember { mutableStateOf(SafTree.saved(context, initialPath)) }
     val treeDocId = tree?.let { runCatching { DocumentsContract.getTreeDocumentId(it) }.getOrNull() }

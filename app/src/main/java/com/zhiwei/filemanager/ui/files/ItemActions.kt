@@ -27,6 +27,7 @@ import com.zhiwei.filemanager.core.util.Format
 import com.zhiwei.filemanager.tool.archive.ArchiveTool
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -44,7 +45,7 @@ data class ItemAction(val label: String, val run: () -> Unit)
  * 2. 通用文件操作
  * 前 7 项直接摆出来，剩下的进「更多」。
  */
-fun itemActions(
+internal fun itemActions(
     context: Context,
     item: FileItem,
     state: FileBrowserState,
@@ -210,7 +211,7 @@ private fun setWallpaper(context: Context, file: File, nav: FileNav) {
 
 /** 双列动作面板：最多 7 个直接可见，其余走「更多」，不霸占整屏。 */
 @Composable
-fun ActionGrid(actions: List<ItemAction>, onMore: (() -> Unit)? = null) {
+internal fun ActionGrid(actions: List<ItemAction>, onMore: (() -> Unit)? = null) {
     Column(Modifier.fillMaxWidth()) {
         actions.chunked(2).forEach { row ->
             Row(Modifier.fillMaxWidth()) {
@@ -259,7 +260,7 @@ fun ActionGrid(actions: List<ItemAction>, onMore: (() -> Unit)? = null) {
 
 /** 「更多」：把剩余动作全列出来，同样是双列，不滚动也能看全。 */
 @Composable
-fun MoreActionsDialog(actions: List<ItemAction>, onClose: () -> Unit) {
+internal fun MoreActionsDialog(actions: List<ItemAction>, onClose: () -> Unit) {
     AlertDialog(
         onDismissRequest = onClose,
         title = { Text("更多工具", fontSize = 15.sp) },

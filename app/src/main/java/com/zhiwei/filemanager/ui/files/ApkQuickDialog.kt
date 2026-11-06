@@ -47,7 +47,7 @@ import java.io.File
  * 以及这个包还能用什么工具（更多）。基础信息在上方一屏读完，不需要滚动。
  */
 @Composable
-fun ApkQuickDialog(
+internal fun ApkQuickDialog(
     item: FileItem,
     state: FileBrowserState,
     nav: FileNav,

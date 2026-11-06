@@ -106,7 +106,7 @@ data class FileNav(
     val openApkTool: (String) -> Unit = {}
 )
 
-private sealed interface FileDialog {
+internal sealed interface FileDialog {
     data class Input(val title: String, val initial: String, val confirmText: String, val onConfirm: (String) -> Unit) : FileDialog
     data class Confirm(val title: String, val message: String, val onConfirm: () -> Unit) : FileDialog
     data class Props(val item: FileItem) : FileDialog

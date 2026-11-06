@@ -159,6 +159,7 @@ fun FileBrowserScreen(state: FileBrowserState, nav: FileNav) {
                                 nav = nav,
                                 onDialog = { dialog = it },
                                 onLongPress = { dialog = FileDialog.ItemMenu(it) },
+                                onSearchFolder = { folderSearchPane = pane },
                                 modifier = Modifier.weight(paneWeight(state, index)).fillMaxHeight()
                             )
                             if (index < state.panes.size - 1) {
@@ -179,6 +180,7 @@ fun FileBrowserScreen(state: FileBrowserState, nav: FileNav) {
                                 nav = nav,
                                 onDialog = { dialog = it },
                                 onLongPress = { dialog = FileDialog.ItemMenu(it) },
+                                onSearchFolder = { folderSearchPane = pane },
                                 modifier = Modifier.weight(paneWeight(state, index)).fillMaxWidth()
                             )
                             if (index < state.panes.size - 1) {
@@ -199,6 +201,7 @@ fun FileBrowserScreen(state: FileBrowserState, nav: FileNav) {
                 nav = nav,
                 onDialog = { dialog = it },
                 onLongPress = { dialog = FileDialog.ItemMenu(it) },
+                onSearchFolder = { folderSearchPane = state.panes[0] },
                 modifier = Modifier.weight(1f)
             )
         }

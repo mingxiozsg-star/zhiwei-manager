@@ -60,7 +60,10 @@ object StorageVolumes {
             val isPrimary = runCatching { volume.isPrimary }.getOrDefault(false) ||
                 isPrimaryPath(path, primaryPath)
             val removable = runCatching { volume.isRemovable }.getOrDefault(false)
-            val description = runCatching { volume.description.orEmpty() }.getOrDefault("")
+            // 注意：只有 getDescription(Context) 是公开 API（API 30 起被标记废弃），
+            // 无参 getDescription() 在公开 SDK 里不存在，别写成 volume.description。
+            @Suppress("DEPRECATION")
+            val description = runCatching { volume.getDescription(context).orEmpty() }.getOrDefault("")
             val kind = when {
                 isPrimary -> StorageEntry.Kind.INTERNAL
                 looksLikeUsb(path, description) -> StorageEntry.Kind.USB

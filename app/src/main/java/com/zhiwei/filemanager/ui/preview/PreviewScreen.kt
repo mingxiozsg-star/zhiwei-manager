@@ -223,7 +223,7 @@ private fun decodeSampled(file: File, maxDim: Int): Bitmap? {
 private fun VideoPreview(file: File) {
     var error by remember(file.absolutePath) { mutableStateOf<String?>(null) }
 
-    Box(Modifier.fillMaxSize().background(android.graphics.Color.BLACK), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black), contentAlignment = Alignment.Center) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
@@ -308,7 +308,7 @@ private fun AudioPreview(file: File) {
                 modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
             )
             Text(
-                text = position / 1000 + "s / " + duration / 1000 + "s",
+                text = "${position / 1000}s / ${duration / 1000}s",
                 fontSize = 10.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

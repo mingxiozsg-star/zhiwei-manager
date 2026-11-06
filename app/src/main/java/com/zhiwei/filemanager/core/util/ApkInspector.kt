@@ -22,7 +22,7 @@ import java.util.zip.ZipFile
  */
 object ApkInspector {
 
-    /** 签名方案存在性。v1 = JAR 签名（META-INF/*.RSA|DSA|EC），v2/v3 = 签名块。 */
+    /** 签名方案存在性。v1 = JAR 签名（META-INF 下的 .RSA / .DSA / .EC），v2/v3 = 签名块。 */
     data class SignatureInfo(
         val v1: Boolean,
         val v2: Boolean,

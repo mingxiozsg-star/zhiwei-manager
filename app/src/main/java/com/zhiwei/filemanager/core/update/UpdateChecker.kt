@@ -40,10 +40,10 @@ object UpdateChecker {
     private const val UA = "ZhiweiManager-Update/1.0 (Android)"
     private const val TIMEOUT_MS = 15000
 
-    /** 镜像前缀（按顺序尝试）。 */
+    /** 镜像前缀（按顺序尝试）。2026-11-07 实测淘汰 gh-proxy.com / ghproxy.net（000 超时或 <1KB/s）。 */
     private val MIRRORS = listOf(
         "https://ghfast.top/",
-        "https://gh-proxy.com/",
+        "https://cors.isteed.cc/",
         ""
     )
 

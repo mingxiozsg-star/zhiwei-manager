@@ -1,7 +1,7 @@
 # 知微管理器（ZhiweiManager）
 
 Android 文件管理器，交互模型参照 MT 管理器（双窗口、无剪贴板中转、直接跨窗口操作），
-内置面向逆向工程与日常维护的工具链。包名 `com.zhiwei.filemanager`，版本 `1.4.1`（versionCode 6）。
+内置面向逆向工程与日常维护的工具链。包名 `com.zhiwei.filemanager`，版本 `1.4.2`（versionCode 7）。
 
 > 构建策略：**不在本地出正式包**。正式包统一由 GitHub Actions 构建（`.github/workflows/android-ci.yml`）。
 > 版本变更记录见 [CHANGELOG.md](CHANGELOG.md)。
